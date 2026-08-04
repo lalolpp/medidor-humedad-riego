@@ -1,0 +1,15 @@
+# Firmware
+*.pio
+.pio/
+build/
+.venv/
+node_modules/
+
+# Entornos y credenciales
+.env
+*.key
+*.pem
+
+# Sistema
+.DS_Store
+Thumbs.db
