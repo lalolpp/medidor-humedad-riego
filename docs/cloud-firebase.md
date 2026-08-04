@@ -32,6 +32,19 @@ Firebase no tiene MQTT nativo; el ESP32 publica por **HTTPS a Firestore/Realtime
 - `devices/{deviceId}/readings/{autoId}` — telemetría: humedad, temperatura, batería, señal LTE, timestamp.
 - `alerts/{alertId}` — alertas de riego, batería baja, pérdida de conectividad.
 
+### Ajustes por dispositivo
+
+El intervalo de muestreo se guarda como ajuste del dispositivo y es sincronizado en dos sentidos:
+
+- `devices/{deviceId}.settings.sampling_interval_min` — intervalo en minutos (10/15/20/30/60).
+- `devices/{deviceId}.settings.updated_at` — cuándo se cambió y quién lo cambió.
+
+Flujo de cambio de intervalo:
+
+1. La app escribe `sampling_interval_min` en Firestore (con reglas que restringen a dueño/admin).
+2. El nodo lo lee en el siguiente ciclo (o recibe un push si hay BLE conectado) y lo aplica en NVS.
+3. El nodo confirma el cambio en `settings` y reporta autonomía estimada en el siguiente reporte.
+
 ## Notas
 
 - Publicación de la app: Google Play US$25 (única), Apple Developer US$99/año.

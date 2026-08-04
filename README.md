@@ -10,7 +10,9 @@ Proyecto de sensores de humedad de suelo para riego tecnificado agrícola, con c
   - **WiFi** para subir datos a la nube.
   - **LTE (SIM)** para subir datos donde no hay WiFi.
   - **BLE** para emparejar, configurar, lectura en vivo y descarga del historial local desde la app móvil.
-- Alimentación: batería 18650 + panel solar (autonomía de ~25 días sin sol).
+- **Intervalo de muestreo configurable** (10/15/20/30/60 min) por dispositivo, con **aviso de autonomía
+  de batería** al cambiarlo (lecturas más frecuentes = más consumo y más revisión de batería).
+- Alimentación: batería 18650 + panel solar (autonomía de ~25 días sin sol a 30 min; ~9–10 días a 10 min).
 - Datos en la nube con Firebase (plan gratuito), con roles de usuario final y administrador.
 - App móvil con acceso a dispositivos e informes.
 

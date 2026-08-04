@@ -38,6 +38,26 @@ El sensor de humedad está conectado **físicamente** al ESP32 (lectura analógi
 - **Usuario final**: ve sus dispositivos, datos en tiempo real, históricos, alertas de riego y descarga de datos (BLE y nube).
 - **Administrador**: ve todos los usuarios y dispositivos, provisiona equipos, gestiona cuentas, monitoreo global y estado de salud de cada nodo (batería, señal LTE).
 
+## Intervalo de muestreo configurable
+
+El nodo no lee ni registra siempre cada 30 min: el intervalo es **configurable por dispositivo**.
+
+- Opciones: **10, 15, 20, 30 y 60 minutos** (configurables vía BLE con la app, o por el administrador).
+- El intervalo se guarda en **NVS** del ESP32 (persiste ante cortes de energía y resets) y se replica en la nube (`devices/{deviceId}.settings.sampling_interval_min`).
+- El deep sleep del nodo usa el intervalo configurado como wake por temporizador.
+
+### Aviso de autonomía al cambiar el intervalo
+
+Cada cambio de intervalo debe mostrar al usuario la **autonomía aproximada de la batería**
+según la configuración (ver `power-budget.md`), para que sepa que lecturas más frecuentes
+significan más consumo y por lo tanto **más revisión/mantenimiento de la batería**:
+
+- Al seleccionar el intervalo, la app calcula y muestra: *"10 min → ~9–10 días de batería sin sol"*.
+- Si la autonomía estimada baja de un umbral (p. ej. 15 días), se muestra un aviso
+  destacado y la app solicita confirmación antes de aplicar el cambio.
+- El nodo reporta el voltaje real de batería como telemetría; la app puede recalcular
+  la autonomía real en vez de usar solo el valor teórico.
+
 ## Almacenamiento local del nodo
 
 Respaldo de lecturas en Flash/SD del ESP32. Si el campo no tiene red, el nodo acumula datos y los sube (o se entregan por BLE) cuando haya cobertura.
