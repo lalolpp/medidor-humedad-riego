@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "160786327743",
+    "project_id": "mantencion-a56b4",
+    "storage_bucket": "mantencion-a56b4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:160786327743:android:425b35a801f715c661be0a",
+        "android_client_info": {
+          "package_name": "cl.riego.medidor_humedad"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "160786327743-giq448bq7ra4pmljj02m67nupcd4htr8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsJdNvACj37nZB2lN8wv6SPX3em43fK8s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "160786327743-1isrj8rabepna48kcau0iruosf0q9fo8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

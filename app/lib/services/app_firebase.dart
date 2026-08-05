@@ -5,10 +5,8 @@ class AppFirebase {
   static bool configured = false;
 
   static Future<bool> initialize() async {
-    final options = DefaultFirebaseOptions.currentPlatform;
-    if (options == null) return false;
     try {
-      await Firebase.initializeApp(options: options);
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       configured = true;
     } catch (_) {
       configured = false;
