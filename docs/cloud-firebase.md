@@ -1,5 +1,12 @@
 # Nube — Firebase
 
+## Proyecto
+
+- **Nombre**: medidor de humedad
+- **ID**: `medidor-de-humedad`
+- **Número**: `270536769377`
+- Proyecto **independiente** de mantencion-lineas.
+
 ## Justificación
 
 Se necesita multi-tenant (usuarios finales + administrador), por lo que Firebase con Auth, Firestore y Cloud Functions es adecuado y **gratis** a la escala del proyecto.
@@ -86,9 +93,12 @@ Pegar en **Realtime Database → Rules** (RULES tab). Archivo fuente: `database.
 > **Importante**: el firmware publica hoy con token legacy en la URL
 > (`?auth=FIREBASE_AUTH_TOKEN`). Ese mecanismo da acceso de administrador y
 > **salta las reglas** (está deprecado por Google). Para el prototipo hay que
-> completar `FIREBASE_AUTH_TOKEN` en `firmware/include/config.h`; a futuro se
-> debe migrar a una autenticación real (Firebase Auth para el nodo o una Cloud
-> Function que firme el ingreso). Ver pendientes en `firmware/README.md`.
+> completar `FIREBASE_AUTH_TOKEN` en `firmware/include/config.h` (RTDB →
+> Configuración del proyecto → *Database secrets*). El host ya configurado es
+> `medidor-de-humedad-default-rtdb.firebaseio.com` (si la base de datos no quedó
+> en la ubicación default, la URL cambia). A futuro se debe migrar a una
+> autenticación real (Firebase Auth para el nodo o una Cloud Function que firme
+> el ingreso). Ver pendientes en `firmware/README.md`.
 
 ## Claim de dispositivos
 

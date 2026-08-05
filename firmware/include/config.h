@@ -20,7 +20,7 @@
 #define HISTORY_MAX_FILES 30
 #define HISTORY_CHUNK_RECORDS 20
 
-#define FIREBASE_HOST "medidor-humedad-riego.firebaseio.com"
+#define FIREBASE_HOST "medidor-de-humedad-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH_TOKEN ""
 
 #define BLE_DEVICE_NAME "MedidorHumedad"
