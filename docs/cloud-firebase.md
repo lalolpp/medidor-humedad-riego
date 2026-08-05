@@ -49,50 +49,25 @@ Flujo de cambio de intervalo:
 
 ### Firestore (la app)
 
-Pegar en **Firestore → Rules** (RULES tab). Archivo fuente: `firestore.rules`.
+> **IMPORTANTE**: la app de humedad comparte el proyecto Firebase **`mantencion-a56b4`**
+> con el sistema de mantención de líneas. Firestore permite **un solo conjunto de
+> reglas**, por lo que el archivo `firestore.rules` contiene las reglas de **ambas
+> apps fusionadas** (sección mantencion-lineas + sección medidor-humedad). No pegar
+> solo un conjunto o la otra app se rompe.
 
-```js
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
-    }
+Pegar **todo el contenido** de `firestore.rules` en **Firestore → Rules** (RULES tab) → *Publish*.
 
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow write: if isSignedIn() && request.auth.uid == userId;
-    }
+La sección de la app de humedad usa el campo **`rol`** (`user` / `admin`) y cubre:
+- `users/{userId}`: alta de cuenta propia con rol `user`.
+- `devices/{deviceId}`: claim por cualquier usuario autenticado; solo dueño/admin lee, actualiza o borra.
+- `devices/{deviceId}/readings/{readingId}`: lectura solo dueño/admin.
+- `alerts/{alertId}`: lectura autenticada; creación solo admin.
 
-    match /devices/{deviceId} {
-      // Usuarios autenticados pueden crear (claim) cualquier dispositivo sin dueño;
-      // solo dueño o admin lee/actualiza los ya asignados.
-      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() &&
-        (resource.data.owner == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
-
-      match /readings/{readingId} {
-        allow read: if isSignedIn() &&
-          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
-        allow create: if isSignedIn();
-        allow update, delete: if isAdmin();
-      }
-    }
-
-    match /alerts/{alertId} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin();
-      allow update, delete: if isAdmin();
-    }
-  }
-}
-```
+> ⚠️ **Pendiente de seguridad**: el `allow update` de `users/{userId}` permite que un
+> usuario edite su propio documento (`request.auth.uid == userId`), con lo que podría
+> auto-promoverse a `rol: admin` (o `role: admin`) en su perfil. Para producción hay
+> que restringir el update propio para que no pueda cambiar los campos `rol`/`role`,
+> o mover la asignación de roles a una Cloud Function.
 
 ### Realtime Database (el nodo ESP32)
 
