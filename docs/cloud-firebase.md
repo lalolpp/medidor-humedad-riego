@@ -49,25 +49,18 @@ Flujo de cambio de intervalo:
 
 ### Firestore (la app)
 
-> **IMPORTANTE**: la app de humedad comparte el proyecto Firebase **`mantencion-a56b4`**
-> con el sistema de mantención de líneas. Firestore permite **un solo conjunto de
-> reglas**, por lo que el archivo `firestore.rules` contiene las reglas de **ambas
-> apps fusionadas** (sección mantencion-lineas + sección medidor-humedad). No pegar
-> solo un conjunto o la otra app se rompe.
+El proyecto Firebase del medidor es **independiente** (no comparte base con
+mantencion-lineas). Pegar **todo el contenido** de `firestore.rules` en
+**Firestore → Rules** (RULES tab) → *Publish*.
 
-Pegar **todo el contenido** de `firestore.rules` en **Firestore → Rules** (RULES tab) → *Publish*.
-
-La sección de la app de humedad usa el campo **`rol`** (`user` / `admin`) y cubre:
-- `users/{userId}`: alta de cuenta propia con rol `user`.
+Las reglas usan el campo **`rol`** (`user` / `admin`) y cubren:
+- `users/{userId}`: alta de cuenta propia con rol `user`; el usuario NO puede auto-promoverse a `admin`.
 - `devices/{deviceId}`: claim por cualquier usuario autenticado; solo dueño/admin lee, actualiza o borra.
 - `devices/{deviceId}/readings/{readingId}`: lectura solo dueño/admin.
 - `alerts/{alertId}`: lectura autenticada; creación solo admin.
 
-> ⚠️ **Pendiente de seguridad**: el `allow update` de `users/{userId}` permite que un
-> usuario edite su propio documento (`request.auth.uid == userId`), con lo que podría
-> auto-promoverse a `rol: admin` (o `role: admin`) en su perfil. Para producción hay
-> que restringir el update propio para que no pueda cambiar los campos `rol`/`role`,
-> o mover la asignación de roles a una Cloud Function.
+Para crear tu usuario admin: regístrate en la app (queda `rol: user`) y luego en
+Firestore cambia manualmente `users/{tuUid}.rol` a `"admin"`.
 
 ### Realtime Database (el nodo ESP32)
 

@@ -1,258 +1,46 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ===================================================================
-    // MANTENCION-LINEAS (roles: admin, gerente_de_planta, jefe_area,
-    // sub_gerente, supervisor, tecnico, ayudante)
-    // ===================================================================
-
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    function isSignedIn() {
+      return request.auth != null;
     }
-
-    function canCreateWork() {
-      return getUserRole() == 'admin' || getUserRole() == 'jefe_area' || getUserRole() == 'supervisor' || getUserRole() == 'gerente_de_planta' || getUserRole() == 'sub_gerente';
-    }
-
-    function isAreaRestricted() {
-      return getUserRole() == 'jefe_area' || getUserRole() == 'supervisor' || getUserRole() == 'sub_gerente';
-    }
-
-    function isTaskAreaRestricted() {
-      return getUserRole() == 'jefe_area' || getUserRole() == 'sub_gerente';
-    }
-
-    function getUserArea() {
-      let a = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.area;
-      return a == null ? 'mantencion' : a;
-    }
-
-    function isOwnArea() {
-      let a = request.resource.data.area;
-      return (a == null ? 'mantencion' : a) == getUserArea();
-    }
-
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && (
-        getUserRole() == 'admin'
-        || (getUserRole() == 'gerente_de_planta' && request.resource.data.role != 'admin')
-        || (isAreaRestricted()
-            && request.resource.data.role != 'admin'
-            && request.resource.data.role != 'gerente_de_planta'
-            && request.resource.data.role != 'jefe_area'
-            && request.resource.data.role != 'sub_gerente'
-            && request.resource.data.area == getUserArea())
-      );
-      allow update: if request.auth != null && (
-        request.auth.uid == userId
-        || getUserRole() == 'admin'
-        || (getUserRole() == 'gerente_de_planta' && request.resource.data.role != 'admin')
-        || (isAreaRestricted()
-            && request.resource.data.role != 'admin'
-            && request.resource.data.role != 'gerente_de_planta'
-            && request.resource.data.role != 'jefe_area'
-            && request.resource.data.role != 'sub_gerente'
-            && request.resource.data.area == getUserArea()
-            && get(/databases/$(database)/documents/users/$(userId)).data.area == getUserArea())
-      );
-      allow delete: if request.auth != null && (
-        getUserRole() == 'admin'
-        || getUserRole() == 'gerente_de_planta'
-        || (isAreaRestricted()
-            && get(/databases/$(database)/documents/users/$(userId)).data.area == getUserArea())
-      );
-
-      match /evaluations/{evalId} {
-        allow read: if request.auth != null && canCreateWork();
-        allow create: if request.auth != null && canCreateWork();
-        allow update, delete: if false;
-      }
-
-      match /notifications/{notifId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create: if request.auth != null;
-        allow update: if request.auth != null && request.auth.uid == userId;
-        allow delete: if false;
-      }
-    }
-
-    match /machines/{machineId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && canCreateWork();
-      allow delete: if request.auth != null && (getUserRole() == 'admin' || getUserRole() == 'jefe_area' || getUserRole() == 'supervisor' || getUserRole() == 'gerente_de_planta' || getUserRole() == 'sub_gerente');
-    }
-
-    match /machine_history/{docId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if false;
-    }
-
-    match /maintenances/{maintenanceId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && canCreateWork() && (!isTaskAreaRestricted() || isOwnArea());
-      allow update: if request.auth != null && (
-        (canCreateWork() && (!isTaskAreaRestricted() || isOwnArea())) ||
-        ((getUserRole() == 'tecnico' || getUserRole() == 'ayudante') && resource.data.assigned_to == request.auth.uid)
-      );
-      allow delete: if request.auth != null && (
-        getUserRole() == 'admin' || getUserRole() == 'gerente_de_planta' || getUserRole() == 'supervisor' ||
-        (isTaskAreaRestricted() && (resource.data.area == null ? 'mantencion' : resource.data.area) == getUserArea())
-      );
-
-      match /notes/{noteId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null;
-        allow update, delete: if false;
-      }
-    }
-
-    match /tasks/{taskId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && canCreateWork() && (!isTaskAreaRestricted() || isOwnArea());
-      allow update: if request.auth != null && (
-        (canCreateWork() && (!isTaskAreaRestricted() || isOwnArea())) ||
-        ((getUserRole() == 'tecnico' || getUserRole() == 'ayudante') && resource.data.assigned_to == request.auth.uid)
-      );
-      allow delete: if request.auth != null && (
-        getUserRole() == 'admin' || getUserRole() == 'gerente_de_planta' || getUserRole() == 'supervisor' ||
-        (isTaskAreaRestricted() && (resource.data.area == null ? 'mantencion' : resource.data.area) == getUserArea())
-      );
-
-      match /notes/{noteId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null;
-        allow update, delete: if false;
-      }
-    }
-
-    match /spare_parts/{partId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && canCreateWork();
-      allow update: if request.auth != null && (
-        canCreateWork() ||
-        getUserRole() == 'tecnico' || getUserRole() == 'ayudante'
-      );
-      allow delete: if request.auth != null && getUserRole() == 'admin';
-    }
-
-    match /stock_movements/{movId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && getUserRole() == 'admin';
-    }
-
-    match /tech_codes/{codeId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && getUserRole() == 'admin';
-      allow update: if request.auth != null && getUserRole() == 'admin';
-      allow delete: if request.auth != null && getUserRole() == 'admin';
-    }
-
-    match /audit_log/{logId} {
-      allow read: if request.auth != null && getUserRole() == 'admin';
-      allow create: if request.auth != null;
-      allow update, delete: if false;
-    }
-
-    match /employee_profiles/{profileId} {
-      allow read: if request.auth != null && canCreateWork();
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && canCreateWork();
-      allow delete: if false;
-
-      match /evaluations/{evalId} {
-        allow read: if request.auth != null && canCreateWork();
-        allow create: if request.auth != null && canCreateWork();
-        allow update, delete: if false;
-      }
-    }
-
-    match /user_presence/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    match /login_history/{sessionId} {
-      allow read: if request.auth != null && getUserRole() == 'admin';
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid == resource.data.user_uid;
-      allow delete: if false;
-    }
-
-    match /work_orders/{orderId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow delete: if request.auth != null && getUserRole() == 'admin';
-      allow update: if false;
-    }
-
-    match /admin_actions/{actionId} {
-      allow read: if request.auth != null && getUserRole() == 'admin';
-      allow create: if request.auth != null && getUserRole() == 'admin';
-      allow update, delete: if false;
-    }
-
-    function hasDocsAccess() {
-      return request.auth != null && (
-        getUserRole() == 'admin'
-        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canViewDocs == true
-      );
-    }
-
-    match /documentacion_tecnica/{docId} {
-      allow read: if hasDocsAccess();
-      allow create, update: if hasDocsAccess();
-      allow delete: if hasDocsAccess();
-    }
-
-    match /gmail_tokens/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    match /gmail_import_progress/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    // ===================================================================
-    // MEDIDOR-HUMEDAD (rol: user / admin, campo 'rol')
-    // ===================================================================
-
-    function isHumedadAdmin() {
-      return request.auth != null &&
+    function isAdmin() {
+      return isSignedIn() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
     }
 
     match /users/{userId} {
-      // Alta de cuenta de la app de humedad: el propio usuario crea su perfil
-      // con rol 'user' (los roles privilegiados se asignan por admin).
-      allow create: if request.auth != null && request.auth.uid == userId &&
+      // Un usuario puede leer su perfil (o cualquier admin); solo él mismo crea
+      // su cuenta (con rol 'user') y se actualiza sin poder auto-promoverse.
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId &&
         request.resource.data.rol == 'user';
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && request.resource.data.rol != 'admin') || isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
     match /devices/{deviceId} {
       // Claim: cualquier usuario autenticado puede crear un dispositivo sin dueño;
-      // solo dueño o admin lee/actualiza los ya asignados.
-      allow read: if request.auth != null && (resource.data.owner == request.auth.uid || isHumedadAdmin());
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (resource.data.owner == request.auth.uid || isHumedadAdmin());
-      allow delete: if isHumedadAdmin();
+      // solo dueño o admin lee/actualiza; solo admin borra.
+      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
 
       match /readings/{readingId} {
-        allow read: if request.auth != null &&
-          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isHumedadAdmin());
-        allow create: if request.auth != null;
-        allow update, delete: if isHumedadAdmin();
+        allow read: if isSignedIn() &&
+          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin();
       }
     }
 
     match /alerts/{alertId} {
-      allow read: if request.auth != null;
-      allow create: if isHumedadAdmin();
-      allow update, delete: if isHumedadAdmin();
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
   }
 }
