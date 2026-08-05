@@ -25,10 +25,15 @@ En fase de **planeación** (BOM definido, arquitectura de datos y energía defin
 ```
 medidor-humedad-riego/
 ├── README.md
-└── docs/
-    ├── architecture.md   # Arquitectura del sistema y flujo de datos
-    ├── hardware.md       # BOM (lista de componentes por nodo)
-    ├── power-budget.md   # Presupuesto de energía y autonomía
-    ├── cloud-firebase.md # Nube, roles y modelo de datos
-    └── costs.md          # Costos estimados
+├── docs/
+│   ├── architecture.md   # Arquitectura del sistema y flujo de datos
+│   ├── hardware.md       # BOM (lista de componentes por nodo)
+│   ├── power-budget.md   # Presupuesto de energía y autonomía
+│   ├── cloud-firebase.md # Nube, roles y modelo de datos
+│   └── costs.md          # Costos estimados
+└── firmware/             # Firmware ESP32 (PlatformIO + Arduino)
+    ├── README.md
+    ├── platformio.ini
+    ├── include/          # headers (config, storage, power, sensor, ...)
+    └── src/              # main.cpp y módulos
 ```
