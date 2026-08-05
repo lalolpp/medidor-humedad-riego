@@ -45,9 +45,11 @@ Flujo de cambio de intervalo:
 2. El nodo lo lee en el siguiente ciclo (o recibe un push si hay BLE conectado) y lo aplica en NVS.
 3. El nodo confirma el cambio en `settings` y reporta autonomía estimada en el siguiente reporte.
 
-## Reglas de seguridad (Firestore Rules)
+## Reglas de seguridad
 
-Pegar en **Firestore → Rules** (RULES tab):
+### Firestore (la app)
+
+Pegar en **Firestore → Rules** (RULES tab). Archivo fuente: `firestore.rules`.
 
 ```js
 rules_version = '2';
@@ -58,7 +60,7 @@ service cloud.firestore {
     }
     function isAdmin() {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
     }
 
     match /users/{userId} {
@@ -67,13 +69,20 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
-      // Los usuarios autenticados pueden crear (claim) cualquier dispositivo sin dueño;
-      // solo dueño o admin lee/escribe los ya asignados.
+      // Usuarios autenticados pueden crear (claim) cualquier dispositivo sin dueño;
+      // solo dueño o admin lee/actualiza los ya asignados.
       allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
       allow update: if isSignedIn() &&
-        (!exists(resource) || resource.data.owner == request.auth.uid || isAdmin());
+        (resource.data.owner == request.auth.uid || isAdmin());
       allow delete: if isAdmin();
+
+      match /readings/{readingId} {
+        allow read: if isSignedIn() &&
+          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin();
+      }
     }
 
     match /alerts/{alertId} {
@@ -85,11 +94,42 @@ service cloud.firestore {
 }
 ```
 
-Nota: el **claim** (botón "Vincular a mi cuenta" en la app) crea el documento
-`devices/{deviceId}` con `owner = uid` del usuario. El `allow create` abierto a
-cualquier usuario autenticado es suficiente para esta etapa; si se quiere mayor
-rigor se puede validar el `deviceId` contra un patrón o requerir que el nodo
-haya sido pre-registrado por un admin.
+### Realtime Database (el nodo ESP32)
+
+Pegar en **Realtime Database → Rules** (RULES tab). Archivo fuente: `database.rules.json`.
+
+```json
+{
+  "rules": {
+    "devices": {
+      "$deviceId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "readings": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}
+```
+
+> **Importante**: el firmware publica hoy con token legacy en la URL
+> (`?auth=FIREBASE_AUTH_TOKEN`). Ese mecanismo da acceso de administrador y
+> **salta las reglas** (está deprecado por Google). Para el prototipo hay que
+> completar `FIREBASE_AUTH_TOKEN` en `firmware/include/config.h`; a futuro se
+> debe migrar a una autenticación real (Firebase Auth para el nodo o una Cloud
+> Function que firme el ingreso). Ver pendientes en `firmware/README.md`.
+
+## Claim de dispositivos
+
+El botón "Vincular a mi cuenta" en la app crea el documento `devices/{deviceId}`
+con `owner = uid` del usuario. El `allow create` abierto a cualquier usuario
+autenticado es suficiente para esta etapa; el `allow update` impide que otro
+usuario se apodere de un dispositivo ya asignado. Si se quiere mayor rigor, se
+puede validar el `deviceId` contra un patrón o requerir que el nodo haya sido
+pre-registrado por un admin.
 
 ## Notas
 

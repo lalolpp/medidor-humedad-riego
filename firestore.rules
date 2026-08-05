@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /devices/{deviceId} {
+      // Usuarios autenticados pueden crear (claim) cualquier dispositivo sin dueño;
+      // solo dueño o admin lee/actualiza los ya asignados.
+      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() &&
+        (resource.data.owner == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+
+      match /readings/{readingId} {
+        allow read: if isSignedIn() &&
+          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /alerts/{alertId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+  }
+}
