@@ -3,11 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medidor_humedad/main.dart';
 
 void main() {
-  testWidgets('App renders home screen', (WidgetTester tester) async {
+  testWidgets('App renders login screen', (WidgetTester tester) async {
     await tester.pumpWidget(const MedidorHumedadApp());
-    await tester.pump();
 
-    expect(find.text('Mis Dispositivos'), findsOneWidget);
-    expect(find.text('Modo demo (sin hardware)'), findsOneWidget);
+    expect(find.text('Medidor de Humedad'), findsOneWidget);
+    expect(find.text('Continuar como demo'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
   });
 }
