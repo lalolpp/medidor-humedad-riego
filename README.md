@@ -36,4 +36,12 @@ medidor-humedad-riego/
     ├── platformio.ini
     ├── include/          # headers (config, storage, power, sensor, ...)
     └── src/              # main.cpp y módulos
+    app/                  # App móvil Flutter (Android + iOS)
+        ├── lib/
+        │   ├── main.dart
+        │   ├── models/       # Reading, Device
+        │   ├── services/     # BLE real, modo demo, autonomía
+        │   ├── screens/      # Dispositivos, detalle/gráfico/config
+        │   └── widgets/      # HumidityChart
+        └── android/ios/      # proyectos nativos
 ```
