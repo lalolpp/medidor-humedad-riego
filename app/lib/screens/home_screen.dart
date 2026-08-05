@@ -21,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _demoMode = true;
   bool _scanning = false;
   List<DiscoveredDevice> _devices = [];
+  Future<List<CloudDevice>>? _cloudFuture;
 
   DeviceService get _service => _demoMode
       ? DemoDeviceService()
@@ -29,7 +30,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _discover());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _discover();
+      _loadCloud();
+    });
+  }
+
+  void _loadCloud() {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (!AppFirebase.configured || uid == null) {
+      setState(() => _cloudFuture = null);
+      return;
+    }
+    setState(() => _cloudFuture = CloudService.instance.myDevices(uid));
   }
 
   Future<void> _discover() async {
@@ -56,12 +69,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _discover();
   }
 
-  void _openDevice(DiscoveredDevice device) {
-    Navigator.of(context).push(
+  void _openDevice(DiscoveredDevice device) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => DeviceDetailScreen(service: _service, device: device),
       ),
     );
+    _loadCloud();
   }
 
   void _onLogout() {
@@ -152,9 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _cloudDevices() {
-    final uid = AuthService.instance.currentUser!.uid;
+    final future = _cloudFuture;
+    if (future == null) return const SizedBox.shrink();
     return FutureBuilder<List<CloudDevice>>(
-      future: CloudService.instance.myDevices(uid),
+      future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Padding(

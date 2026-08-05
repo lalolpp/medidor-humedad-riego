@@ -45,6 +45,52 @@ Flujo de cambio de intervalo:
 2. El nodo lo lee en el siguiente ciclo (o recibe un push si hay BLE conectado) y lo aplica en NVS.
 3. El nodo confirma el cambio en `settings` y reporta autonomía estimada en el siguiente reporte.
 
+## Reglas de seguridad (Firestore Rules)
+
+Pegar en **Firestore → Rules** (RULES tab):
+
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /devices/{deviceId} {
+      // Los usuarios autenticados pueden crear (claim) cualquier dispositivo sin dueño;
+      // solo dueño o admin lee/escribe los ya asignados.
+      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() &&
+        (!exists(resource) || resource.data.owner == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /alerts/{alertId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+  }
+}
+```
+
+Nota: el **claim** (botón "Vincular a mi cuenta" en la app) crea el documento
+`devices/{deviceId}` con `owner = uid` del usuario. El `allow create` abierto a
+cualquier usuario autenticado es suficiente para esta etapa; si se quiere mayor
+rigor se puede validar el `deviceId` contra un patrón o requerir que el nodo
+haya sido pre-registrado por un admin.
+
 ## Notas
 
 - Publicación de la app: Google Play US$25 (única), Apple Developer US$99/año.

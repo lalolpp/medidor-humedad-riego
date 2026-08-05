@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:medidor_humedad/models/device.dart';
 import 'package:medidor_humedad/models/reading.dart';
+import 'package:medidor_humedad/services/app_firebase.dart';
+import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/autonomy.dart';
+import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/device_service.dart';
 import 'package:medidor_humedad/services/nodo_connection.dart';
 import 'package:medidor_humedad/widgets/humidity_chart.dart';
@@ -201,6 +204,37 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     }
   }
 
+  bool get _canClaim =>
+      AppFirebase.configured && AuthService.instance.currentUser != null;
+
+  Future<void> _claimDevice() async {
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+    setState(() => _busy = true);
+    try {
+      await CloudService.instance.claimDevice(
+        user.uid,
+        widget.device.id,
+        widget.device.name,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dispositivo vinculado a tu cuenta (en la nube)'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al vincular: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -237,6 +271,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (_canClaim) ...[
+                      _claimCard(context),
+                      const SizedBox(height: 16),
+                    ],
                     _statusCard(context),
                     const SizedBox(height: 16),
                     _autonomyCard(context),
@@ -246,6 +284,21 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     _historyCard(context),
                   ],
                 ),
+    );
+  }
+
+  Widget _claimCard(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: ListTile(
+        leading: const Icon(Icons.cloud_upload_outlined, size: 32),
+        title: const Text('Vincular a mi cuenta'),
+        subtitle: const Text(
+          'El dispositivo aparecerá en tus dispositivos de la nube.',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: _busy ? null : _claimDevice,
+      ),
     );
   }
 
