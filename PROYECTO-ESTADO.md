@@ -39,10 +39,10 @@ y el host del firmware listos, pero falta la reconfiguración de la app.
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
-### 1. Reconfigurar la app Flutter con el nuevo proyecto (bloqueante para nube)
-- [ ] Registrar la app Android (`cl.riego.medidor_humedad`) en el nuevo proyecto y descargar `google-services.json`.
-- [ ] **Reemplazar** `app/android/app/google-services.json` (aún apunta a `mantencion-a56b4`).
-- [ ] En `app/`: ejecutar `flutterfire configure --project=medidor-de-humedad` (regenera `firebase_options.dart`).
+### 1. Reconfigurar la app Flutter con el nuevo proyecto (bloqueante para nube) ✅
+- [x] Registrar la app Android (`cl.riego.medidor_humedad`) en el nuevo proyecto y descargar `google-services.json`.
+- [x] **Reemplazar** `app/android/app/google-services.json` (ahora apunta a `medidor-de-humedad`).
+- [x] En `app/`: ejecutar `flutterfire configure --project=medidor-de-humedad` (regenera `firebase_options.dart`).
 
 ### 2. Pegar reglas en la consola del proyecto nuevo
 - [ ] **Firestore → Rules**: pegar contenido de `firestore.rules` → Publish.
@@ -54,8 +54,8 @@ y el host del firmware listos, pero falta la reconfiguración de la app.
 ### 4. Crear tu usuario admin
 - [ ] Registrarte en la app (queda `rol: user`) y en Firestore cambiar `users/{tuUid}.rol` a `"admin"`.
 
-### 5. Bug de compilación en la app
-- [ ] `app/lib/services/ble_device_service.dart` (~líneas 99–113): los `switch case` no tienen `break` → error de compilación en Dart. Corregir.
+### 5. Bug de compilación en la app ✅ (descartado)
+- [x] `app/lib/services/ble_device_service.dart`: el switch sin `break` **no es un error**. Desde Dart 3.0 el fall-through se eliminó y el linter `unnecessary_breaks` recomienda omitir `break` al final de un case no vacío. Verificado con `dart analyze` y ejecución: compila y no cae al siguiente case. No requiere cambios.
 
 ### 6. Integración LTE (pendiente grande)
 - [ ] `cloud.cpp` hoy solo usa WiFi. Falta integrar el módulo **A7670E** (pin `PIN_LTE_PWR` sin uso) y la publicación por LTE con SIM.

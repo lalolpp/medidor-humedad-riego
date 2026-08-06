@@ -15,20 +15,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyD9nLSqOKGgHYaJFEtve9G3jr4ykqAg0LQ',
-    appId: '1:160786327743:web:752cd456eea0e69361be0a',
-    messagingSenderId: '160786327743',
-    projectId: 'mantencion-a56b4',
-    authDomain: 'mantencion-a56b4.firebaseapp.com',
-    storageBucket: 'mantencion-a56b4.firebasestorage.app',
-    measurementId: 'G-7D28CKY10V',
+    apiKey: 'AIzaSyCcqtbCigQbxkKJ7zqFxbCuaygvBYTGIYw',
+    appId: '1:270536769377:web:13d91518a31894cf4a0f20',
+    messagingSenderId: '270536769377',
+    projectId: 'medidor-de-humedad',
+    authDomain: 'medidor-de-humedad.firebaseapp.com',
+    storageBucket: 'medidor-de-humedad.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDsJdNvACj37nZB2lN8wv6SPX3em43fK8s',
-    appId: '1:160786327743:android:425b35a801f715c661be0a',
-    messagingSenderId: '160786327743',
-    projectId: 'mantencion-a56b4',
-    storageBucket: 'mantencion-a56b4.firebasestorage.app',
+    apiKey: 'AIzaSyCgF0enQM543WklTL7tocxtRA-k0r9kprg',
+    appId: '1:270536769377:android:d7021f9bc93066704a0f20',
+    messagingSenderId: '270536769377',
+    projectId: 'medidor-de-humedad',
+    storageBucket: 'medidor-de-humedad.firebasestorage.app',
   );
 }
