@@ -149,3 +149,28 @@ bool cloudPublish(const SensorReading &r, uint16_t intervalMin, float daysNoSun)
   return postReading(token, r, intervalMin, daysNoSun) &&
          updateDeviceMeta(token, r, intervalMin, daysNoSun);
 }
+
+uint16_t cloudFetchInterval(uint16_t fallback) {
+  if (!connected && !cloudLogin()) return fallback;
+
+  String token = idToken();
+  if (token.isEmpty()) return fallback;
+
+  String url = firestoreBase() + "/devices/" + settings().deviceId +
+               "/config/current";
+  client.setInsecure();
+  HTTPClient http;
+  if (!http.begin(client, url)) return fallback;
+  http.addHeader("Authorization", String("Bearer ") + token);
+  int code = http.GET();
+  String resp = http.getString();
+  http.end();
+  if (code != 200) return fallback;
+
+  JsonDocument doc;
+  if (deserializeJson(doc, resp)) return fallback;
+  const char *s = doc["fields"]["intervalMin"]["integerValue"] | "";
+  if (s[0] == '\0') return fallback;
+  uint16_t v = (uint16_t)strtoul(s, nullptr, 10);
+  return v > 0 ? v : fallback;
+}

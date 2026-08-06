@@ -22,6 +22,10 @@ void setup() {
 
   if (settings().cloudEnabled) {
     if (cloudLogin()) {
+      // Ajusta el intervalo de reporte según la configuración remota
+      // (configurado desde la app) antes de publicar.
+      settingsSetInterval(
+          cloudFetchInterval(settings().samplingIntervalMin));
       float days = autonomyDays(settings().samplingIntervalMin,
                                 settings().batteryCapacityMah, r.batteryLevel01);
       cloudPublish(r, settings().samplingIntervalMin, days);

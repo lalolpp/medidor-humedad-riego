@@ -4,6 +4,8 @@ import 'package:medidor_humedad/models/reading.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/csv_export.dart';
+import 'package:medidor_humedad/services/infiltration.dart';
+import 'package:medidor_humedad/widgets/dual_axis_chart.dart';
 import 'package:medidor_humedad/widgets/metrics_chart.dart';
 
 class CloudDeviceDetailScreen extends StatefulWidget {
@@ -18,11 +20,16 @@ class CloudDeviceDetailScreen extends StatefulWidget {
 class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
   late Future<List<Reading>> _readingsFuture;
   bool _exporting = false;
+  bool _savingInterval = false;
+  int? _interval;
+
+  static const _intervals = [15, 30, 60, 120, 360, 720];
 
   @override
   void initState() {
     super.initState();
     _readingsFuture = _loadReadings();
+    _interval = widget.device.intervalMin ?? 30;
   }
 
   Future<List<Reading>> _loadReadings() {
@@ -63,6 +70,29 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     }
   }
 
+  Future<void> _saveInterval(int intervalMin) async {
+    setState(() {
+      _savingInterval = true;
+      _interval = intervalMin;
+    });
+    try {
+      await CloudService.instance.setIntervalConfig(
+          widget.device.deviceId, intervalMin);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Intervalo guardado: cada $intervalMin min')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _interval = widget.device.intervalMin ?? 30);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar intervalo: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingInterval = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = widget.device;
@@ -90,6 +120,8 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
         children: [
           _statusCard(d, suffix),
           const SizedBox(height: 16),
+          _intervalCard(d),
+          const SizedBox(height: 16),
           Text('Humedad del suelo',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -108,6 +140,14 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                     style: const TextStyle(color: Colors.orange));
               }
               final readings = snapshot.data ?? [];
+              final humidityPoints = [
+                for (final r in readings) MetricPoint(r.timestamp, r.humidity),
+              ];
+              final tempPoints = [
+                for (final r in readings)
+                  if (!r.soilTemp.isNaN)
+                    MetricPoint(r.timestamp, AppSettings.toDisplay(r.soilTemp)),
+              ];
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -116,17 +156,14 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                       MetricSeries(
                         label: 'Humedad',
                         color: Colors.blue,
-                        points: [
-                          for (final r in readings)
-                            MetricPoint(r.timestamp, r.humidity),
-                        ],
+                        points: humidityPoints,
                       ),
                     ],
                     unitLabel: '%',
                     minY: 0,
                     maxY: 100,
                   ),
-                  if (readings.any((r) => !r.soilTemp.isNaN)) ...[
+                  if (tempPoints.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text('Temperatura del suelo',
                         style: Theme.of(context).textTheme.titleMedium),
@@ -136,16 +173,36 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                         MetricSeries(
                           label: 'Temp. suelo',
                           color: Colors.orange,
-                          points: [
-                            for (final r in readings)
-                              if (!r.soilTemp.isNaN)
-                                MetricPoint(r.timestamp,
-                                    AppSettings.toDisplay(r.soilTemp)),
-                          ],
+                          points: tempPoints,
                         ),
                       ],
                       unitLabel: suffix,
                     ),
+                    const SizedBox(height: 20),
+                    Text('Cruce: temperatura vs humedad',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    DualAxisChart(
+                      humidity: humidityPoints,
+                      temp: tempPoints,
+                      tempUnit: suffix,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Un pico de temperatura que coincide con una caída de '
+                      'humedad indica estrés hídrico de la tierra.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey),
+                    ),
+                  ],
+                  if (computeInfiltration(readings) case final info?) ...[
+                    const SizedBox(height: 20),
+                    Text('Índice de infiltración / drenaje',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    _infiltrationCard(info),
                   ],
                 ],
               );
@@ -198,6 +255,74 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _intervalCard(CloudDevice d) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Modo de bajo consumo (deep sleep)',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            const Text(
+              'Cada cuánto despierta el sensor para reportar. A mayor '
+              'intervalo, mayor duración de la batería.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int>(
+              key: ValueKey(_interval),
+              initialValue: _interval,
+              decoration: const InputDecoration(
+                labelText: 'Intervalo de reporte',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final m in _intervals)
+                  DropdownMenuItem(
+                    value: m,
+                    child: Text(
+                      m < 60
+                          ? 'Cada $m minutos'
+                          : m == 60
+                              ? 'Cada 1 hora'
+                              : 'Cada ${m ~/ 60} horas',
+                    ),
+                  ),
+              ],
+              onChanged: _savingInterval
+                  ? null
+                  : (value) {
+                      if (value != null) _saveInterval(value);
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infiltrationCard(InfiltrationInfo info) {
+    final color = info.ratePctPerHour >= 3.0
+        ? Colors.red
+        : info.ratePctPerHour >= 0.3
+            ? Colors.green
+            : Colors.orange;
+    return Card(
+      child: ListTile(
+        leading: Icon(Icons.water_drop, color: color),
+        title: Text(info.assessment,
+            style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          'Tasa de descenso: ${info.ratePctPerHour.toStringAsFixed(1)} %/h\n'
+          '${info.detail}',
+        ),
+        isThreeLine: true,
       ),
     );
   }

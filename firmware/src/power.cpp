@@ -1,7 +1,7 @@
 #include "power.h"
 #include "config.h"
 
-static const uint16_t kAllowedIntervals[] = {10, 15, 20, 30, 60};
+static const uint16_t kAllowedIntervals[] = {10, 15, 20, 30, 60, 120, 360, 720};
 
 bool isValidInterval(uint16_t intervalMin) {
   for (uint8_t i = 0; i < sizeof(kAllowedIntervals) / sizeof(kAllowedIntervals[0]); i++) {

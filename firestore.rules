@@ -42,6 +42,14 @@ service cloud.firestore {
         allow create: if isSignedIn();
         allow update, delete: if isAdmin();
       }
+
+      match /config/{configId} {
+        // Configuración remota del nodo (p. ej. intervalo de reporte/deep
+        // sleep). El nodo autenticado la lee; solo dueño o admin la escribe.
+        allow read: if isSignedIn();
+        allow create, update, delete: if isSignedIn() &&
+          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
+      }
     }
 
     match /fields/{fieldId} {

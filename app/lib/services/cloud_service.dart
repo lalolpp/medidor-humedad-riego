@@ -64,6 +64,20 @@ class CloudService {
     });
   }
 
+  /// Configuración remota del nodo: intervalo de reporte (min) que el
+  /// firmware lee en cada despertar para ajustar su deep sleep.
+  Future<void> setIntervalConfig(String deviceId, int intervalMin) async {
+    await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(deviceId)
+        .collection('config')
+        .doc('current')
+        .set({
+      'intervalMin': intervalMin,
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
   Future<List<Reading>> readingsFor(String deviceId,
       {int limit = 2000, DateTime? from, DateTime? to}) async {
     var query = FirebaseFirestore.instance
