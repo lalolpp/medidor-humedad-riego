@@ -14,6 +14,9 @@
 #define DEFAULT_BATTERY_CAPACITY_MAH 2500
 #define DEFAULT_DEVICE_ID "dev0001"
 
+// Versión del firmware, comparada con otaVersion remota para decidir OTA.
+#define FIRMWARE_VERSION "1.0.0"
+
 #define SLEEP_CURRENT_MAH_PER_DAY 0.7f
 #define ACTIVE_MAH_PER_CYCLE 2.1f
 

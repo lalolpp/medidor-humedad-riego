@@ -109,6 +109,25 @@ class CloudService {
     });
   }
 
+  /// Configuración OTA: el nodo descargará el firmware .bin cuando su
+  /// versión local difiera de `version`.
+  Future<void> setOtaConfig(
+    String deviceId, {
+    required String url,
+    required String version,
+  }) async {
+    await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(deviceId)
+        .collection('config')
+        .doc('current')
+        .set({
+      'otaUrl': url,
+      'otaVersion': version,
+      'otaRequestedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
   Future<List<Reading>> readingsFor(String deviceId,
       {int limit = 2000, DateTime? from, DateTime? to}) async {
     var query = FirebaseFirestore.instance

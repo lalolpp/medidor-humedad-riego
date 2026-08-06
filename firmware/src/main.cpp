@@ -9,6 +9,10 @@
 #include "cloud.h"
 #include "ble_service.h"
 
+#ifdef ENABLE_OTA
+#include "ota.h"
+#endif
+
 static unsigned long bleWindowEnd = 0;
 
 void setup() {
@@ -29,6 +33,17 @@ void setup() {
       float days = autonomyDays(settings().samplingIntervalMin,
                                 settings().batteryCapacityMah, r.batteryLevel01);
       cloudPublish(r, settings().samplingIntervalMin, days);
+
+#ifdef ENABLE_OTA
+      String otaUrl, otaVersion;
+      if (cloudFetchOta(otaUrl, otaVersion) &&
+          otaVersion != FIRMWARE_VERSION) {
+        Serial.printf("[OTA] versión remota %s != local %s, actualizando...\n",
+                      otaVersion.c_str(), FIRMWARE_VERSION);
+        performOta(otaUrl);
+      }
+#endif
+
       cloudDisconnect();
     }
   }

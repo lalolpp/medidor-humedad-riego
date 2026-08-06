@@ -1,72 +1,85 @@
 # Estado del proyecto — Medidor de Humedad
 
-Actualizado: 2026-08-05
+Actualizado: 2026-08-06
 
-## Etapa actual: 🚧 Prototipo funcional (app + firmware) con nube en configuración
+## Etapa actual: ✅ Prototipo funcional — app + firmware + nube operativos
 
-El plan inicial (hardware, energía, costos) está completo en `docs/`. El firmware
-ESP32 y la app Flutter ya existen y corren (firmware sin probar en hardware real,
-app con modo demo funcional). La integración con el **nuevo proyecto Firebase**
-`medidor-de-humedad` está **en curso**: se creó el proyecto y se dejaron las reglas
-y el host del firmware listos, pero falta la reconfiguración de la app.
+El plan inicial (hardware, energía, costos) está en `docs/`. El firmware ESP32 y la
+app Flutter existen, compilan y corren. La integración con el **proyecto Firebase
+`medidor-de-humedad`** está **completa**: Auth (email/Google), Firestore (reglas
+desplegadas), firmware publicando telemetría por Firestore REST con ID token,
+dashboard con el diseño real del campo (8 sectores de riego) y APK release generado.
 
 ## Lo que ya está hecho ✅
 
-### Planeación (`docs/`)
-- `architecture.md` — flujo de datos: sensor → nodo → (WiFi/LTE) → Firebase → app; y BLE local.
-- `hardware.md` — BOM <$50 USD/nodo (ESP32 + A7670E LTE + sensor capacitivo + solar).
-- `power-budget.md` — ~85–100 mAh/día; batería 18650 → ~25 días sin sol.
-- `costs.md` — nube ~$0–1.200 CLP/mes; SIM a cargo del cliente.
-- `cloud-firebase.md` — proyecto nuevo, reglas, roles.
+### Nube (proyecto `medidor-de-humedad`, número `270536769377`)
+- Auth: email/contraseña (y Google) habilitado. Cuenta de nodo `nodo@medidor.cl` (firmware).
+- Firestore en modo producción; reglas en `firestore.rules` **desplegadas** (users, devices,
+  readings, config, fields, sectors, crops, alerts; compartir por email con roles).
+- RTDB creada con `database.rules.json` (respaldo).
+- `edo.electric@gmail.com` con `rol: admin`.
+- Deploy de reglas: `firebase deploy --only firestore:rules --project medidor-de-humedad`.
+- `firebase.json` y `firestore.indexes.json` en la raíz del repo.
 
 ### Firmware ESP32 (`firmware/`)
-- Ciclo de vida: despertar → leer sensor → guardar en LittleFS (historial por día) → publicar → ventana BLE (~30 s) → deep sleep.
-- Servicio BLE GATT (UUIDs compartidos con la app): humedad en vivo, batería, intervalo configurable, autonomía, historial por chunks.
+- Ciclo: despertar → leer sensor → guardar LittleFS → publicar → ventana BLE → deep sleep.
+- Sensores: humedad capacitiva (ADC 34) + **DS18B20** temperatura de suelo (pin 27).
+- **Firestore REST con Firebase Auth** (`cloud.cpp`): `signInWithPassword` → ID token →
+  POST reading + PATCH meta del device (ArduinoJson). Compilado OK (18.9% RAM / 56.6% flash).
+- **Intervalo de reporte configurable desde la app** (`cloudFetchInterval`): el nodo lee
+  `devices/{id}/config/current` al despertar y ajusta su deep sleep (intervalos 10–720 min).
+- **OTA listo para activar**: módulo `ota.cpp` + particiones `partitions_ota.csv` + env
+  `esp32dev_ota` (flag `ENABLE_OTA`). El nodo compara `otaVersion` remota con
+  `FIRMWARE_VERSION` y descarga el `.bin`. Requiere grabar UNA vez por USB el esquema OTA.
+- BLE GATT (humedad en vivo, batería, intervalo, autonomía, historial por chunks).
 - Ajustes en NVS, historial con recorte a 30 archivos.
-- `config.h` ya apunta a `medidor-de-humedad-default-rtdb.firebaseio.com`.
 
 ### App Flutter (`app/`)
-- Login/registro con Firebase Auth; campo de rol **`rol`** (`user` / `admin`).
-- Pantallas: login, lista de dispositivos, detalle del nodo (en vivo, batería, autonomía, intervalo, historial descargable, gráfico).
-- BLE real (`flutter_blue_plus`) + **modo demo** sin hardware.
-- Claim de dispositivo ("Vincular a mi cuenta" → Firestore `devices/{id}`).
-- Firestore: `users/{uid}` (rol), `devices/{id}` (owner), `alerts`.
-
-### Nube
-- Reglas Firestore solo-medidor en `firestore.rules` (rol `user`/`admin`, sin auto-promoción).
-- Reglas RTDB en `database.rules.json`.
-- **Proyecto Firebase**: `medidor-de-humedad` (ID) / número `270536769377`.
+- Login/registro Firebase Auth; `rol` user/admin; unidad C/F (`AppSettings`).
+- **Dashboard "Mi campo"**: diseño real del predio con 8 sectores (manzanos gotero 4.17 L/h,
+  kiwis microaspersión 27 L/h), áreas, estado por sector (requiere riego/OK), clima
+  Open-Meteo por campo (alertas de lluvia ≥50%).
+- **Seed del diseño**: botón "Cargar diseño de mi campo" crea el campo "Nicolini 2"
+  (8 sectores) + perfiles Manzano/Kiwi.
+- Sector → ficha técnica (área, emisores, caudal, presión, N° líneas) + sondas + comparativa 24 h.
+- Detalle de sonda: humedad/temp históricas, **gráfico de cruce temp-vs-humedad (doble eje)**,
+  **índice de infiltración/drenaje**, export **CSV** (compartir archivo), **intervalo de
+  reporte configurable**, **compartir dispositivo por email** (Solo lectura/Administrador).
+- **Roles/compartir**: reglas `shares {email: role}`; viewer lee, manager escribe.
+- **Modo oscuro automático** (tema del sistema); **barras de señal RSSI** en BLE.
+- BLE real (`flutter_blue_plus`) + modo demo; claim de dispositivo (field/sector/crop).
+- APK release generado: `app/build/app/outputs/flutter-apk/app-release.apk` (~52 MB).
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
-### 1. Reconfigurar la app Flutter con el nuevo proyecto (bloqueante para nube) ✅
-- [x] Registrar la app Android (`cl.riego.medidor_humedad`) en el nuevo proyecto y descargar `google-services.json`.
-- [x] **Reemplazar** `app/android/app/google-services.json` (ahora apunta a `medidor-de-humedad`).
-- [x] En `app/`: ejecutar `flutterfire configure --project=medidor-de-humedad` (regenera `firebase_options.dart`).
+### 1. Enlace de cobertura (RSSI en nube)
+- [ ] Mostrar la última RSSI (de readings) en las tarjetas del dashboard y detalle de sonda,
+      para diagnóstico de cobertura WiFi/LTE antes de fallas.
 
-### 2. Pegar reglas en la consola del proyecto nuevo
-- [ ] **Firestore → Rules**: pegar contenido de `firestore.rules` → Publish.
-- [ ] **Realtime Database → Rules**: pegar contenido de `database.rules.json` → Publish.
+### 2. Notificaciones push (alertas)
+- [ ] Configurar **FCM** en el proyecto y en la app (`firebase_messaging`).
+- [ ] Alertas por umbral (humedad bajo `irrigateBelow` / temp fuera de rango) y por
+      helada (clima minTemp < umbral del cultivo). Hook/cloud function que notifique.
 
-### 3. Firmware: autenticación en RTDB ✅
-- [x] Los *Database secrets* legacy ya no existen en proyectos nuevos. Se reemplazó por **Firebase Auth**: el nodo usa la cuenta `nodo@medidor.cl` (creada vía REST) y obtiene un *ID token* con `signInWithPassword`; publica con `?auth=<idToken>`. Config en `config.h` (`FIREBASE_API_KEY`, `FIREBASE_AUTH_EMAIL`, `FIREBASE_AUTH_PASSWORD`). Verificado de punta a punta y compilado OK.
+### 3. Automatización de riego (válvulas/relé) — **requiere aclaración**
+- [ ] Definir cómo se implementa (¿relé en el nodo? ¿IFTTT/webhook a un programador?).
+- [ ] Regla en la app: si humedad < umbral y no hay lluvia prevista → sugerir/ejecutar riego.
 
-### 4. Crear tu usuario admin
-- [ ] Registrarte en la app (queda `rol: user`) y en Firestore cambiar `users/{tuUid}.rol` a `"admin"`.
+### 4. Integración LTE (pendiente grande)
+- [ ] `cloud.cpp` hoy usa WiFi. Falta integrar el módulo **A7670E** (pin `PIN_LTE_PWR`)
+      y publicar por LTE con SIM.
 
-### 5. Bug de compilación en la app ✅ (descartado)
-- [x] `app/lib/services/ble_device_service.dart`: el switch sin `break` **no es un error**. Desde Dart 3.0 el fall-through se eliminó y el linter `unnecessary_breaks` recomienda omitir `break` al final de un case no vacío. Verificado con `dart analyze` y ejecución: compila y no cae al siguiente case. No requiere cambios.
+### 5. OTA en terreno
+- [ ] Flashear UNA vez por USB el env `esp32dev_ota` (esquema de particiones con 2 slots).
+- [ ] Subir el `.bin` a una URL estable y programar la actualización desde la app.
 
-### 6. Integración LTE (pendiente grande)
-- [ ] `cloud.cpp` hoy solo usa WiFi. Falta integrar el módulo **A7670E** (pin `PIN_LTE_PWR` sin uso) y la publicación por LTE con SIM.
+### 6. Widgets de pantalla de inicio (iOS/Android)
+- [ ] App Widgets que muestren humedad/temp actual sin abrir la app.
 
-### 7. Decidir dónde vive la telemetría
-- [ ] La app lee **Firestore** (`devices/{id}`) pero el firmware escribe **Realtime DB** (`devices/{id}/readings.json`). Unificar (recomendado: migrar el firmware a Firestore REST, o la app a RTDB).
-
-### 8. Calibración en terreno
+### 7. Calibración en terreno
 - [ ] Sensor SEN0193: calibrar ADC → % humedad (seco vs saturado) en `sensor.cpp`.
 - [ ] Confirmar divisor de batería y ajustar `BATTERY_DIVIDER_GAIN` en `config.h`.
 
-### 9. Compilar y probar
-- [ ] `pio run` (firmware) y `flutter analyze` / `flutter build` (app) para verificar.
-- [ ] Probar BLE real entre app y nodo.
+### 8. Verificación final
+- [ ] `pio run` y `flutter analyze`/`flutter test`/`flutter build` antes de cada release.
+- [ ] Probar BLE real entre app y nodo; probar compartir entre dos cuentas.

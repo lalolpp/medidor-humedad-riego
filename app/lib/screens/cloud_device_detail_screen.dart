@@ -23,6 +23,9 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
   bool _exporting = false;
   bool _savingInterval = false;
   int? _interval;
+  final _otaUrlController = TextEditingController();
+  final _otaVersionController = TextEditingController();
+  bool _savingOta = false;
 
   static const _intervals = [15, 30, 60, 120, 360, 720];
 
@@ -31,6 +34,13 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     super.initState();
     _readingsFuture = _loadReadings();
     _interval = widget.device.intervalMin ?? 30;
+  }
+
+  @override
+  void dispose() {
+    _otaUrlController.dispose();
+    _otaVersionController.dispose();
+    super.dispose();
   }
 
   Future<List<Reading>> _loadReadings() {
@@ -94,6 +104,52 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     }
   }
 
+  Future<void> _saveOta() async {
+    final url = _otaUrlController.text.trim();
+    final version = _otaVersionController.text.trim();
+    if (url.isEmpty || !url.startsWith('http')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa la URL del firmware .bin')),
+      );
+      return;
+    }
+    if (version.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa la versión del firmware')),
+      );
+      return;
+    }
+    setState(() => _savingOta = true);
+    try {
+      await CloudService.instance.setOtaConfig(
+        widget.device.deviceId,
+        url: url,
+        version: version,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text('Actualización programada para la versión $version')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al programar OTA: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingOta = false);
+    }
+  }
+
+  bool _canManage(CloudDevice d) {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (d.owner == uid) return true;
+    final email = AuthService.instance.currentUser?.email?.toLowerCase();
+    return email != null && d.shares[email] == 'manager';
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = widget.device;
@@ -128,6 +184,10 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
           _statusCard(d, suffix),
           const SizedBox(height: 16),
           _intervalCard(d),
+          if (_canManage(d)) ...[
+            const SizedBox(height: 16),
+            _otaCard(d),
+          ],
           const SizedBox(height: 16),
           Text('Humedad del suelo',
               style: Theme.of(context).textTheme.titleMedium),
@@ -320,6 +380,58 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                   : (value) {
                       if (value != null) _saveInterval(value);
                     },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _otaCard(CloudDevice d) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Actualización de firmware (OTA)',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            const Text(
+              'El nodo descargará el .bin cuando su versión local difiera. '
+              'Requiere nodos flasheados con el esquema OTA (2 slots).',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _otaUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'URL del firmware (.bin)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _otaVersionController,
+              decoration: const InputDecoration(
+                labelText: 'Versión (ej. 1.1.0)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _savingOta ? null : _saveOta,
+              icon: _savingOta
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.system_update_alt),
+              label: const Text('Programar actualización'),
             ),
           ],
         ),

@@ -10,3 +10,6 @@ bool cloudPublish(const SensorReading &reading, uint16_t intervalMin, float days
 // intervalo de reporte en minutos configurado desde la app, o `fallback`
 // si no existe o hay error.
 uint16_t cloudFetchInterval(uint16_t fallback);
+// Lee la configuración OTA (otaUrl/otaVersion). Devuelve false si no hay
+// actualización configurada o hay error.
+bool cloudFetchOta(String &url, String &version);

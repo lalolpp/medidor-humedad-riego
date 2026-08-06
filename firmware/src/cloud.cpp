@@ -174,3 +174,27 @@ uint16_t cloudFetchInterval(uint16_t fallback) {
   uint16_t v = (uint16_t)strtoul(s, nullptr, 10);
   return v > 0 ? v : fallback;
 }
+
+bool cloudFetchOta(String &url, String &version) {
+  if (!connected && !cloudLogin()) return false;
+
+  String token = idToken();
+  if (token.isEmpty()) return false;
+
+  String endpoint = firestoreBase() + "/devices/" + settings().deviceId +
+                    "/config/current";
+  client.setInsecure();
+  HTTPClient http;
+  if (!http.begin(client, endpoint)) return false;
+  http.addHeader("Authorization", String("Bearer ") + token);
+  int code = http.GET();
+  String resp = http.getString();
+  http.end();
+  if (code != 200) return false;
+
+  JsonDocument doc;
+  if (deserializeJson(doc, resp)) return false;
+  url = doc["fields"]["otaUrl"]["stringValue"] | "";
+  version = doc["fields"]["otaVersion"]["stringValue"] | "";
+  return !url.isEmpty();
+}
