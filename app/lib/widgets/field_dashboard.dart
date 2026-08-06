@@ -4,8 +4,10 @@ import 'package:medidor_humedad/models/crop.dart';
 import 'package:medidor_humedad/models/field.dart';
 import 'package:medidor_humedad/models/sector.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
+import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/weather_service.dart';
+import 'package:medidor_humedad/screens/cloud_device_detail_screen.dart';
 import 'package:medidor_humedad/screens/sector_detail_screen.dart';
 
 class FieldDashboard extends StatefulWidget {
@@ -46,7 +48,17 @@ class _FieldDashboardState extends State<FieldDashboard> {
   Future<_LoadResult> _load() async {
     final fields = await CloudService.instance.myFields(widget.uid);
     final crops = await CloudService.instance.myCrops(widget.uid);
-    final devices = await CloudService.instance.myDevices(widget.uid);
+    var devices = await CloudService.instance.myDevices(widget.uid);
+    final email = AuthService.instance.currentUser?.email;
+    if (email != null) {
+      final shared =
+          await CloudService.instance.devicesSharedWithEmail(email);
+      final ids = devices.map((d) => d.deviceId).toSet();
+      devices = [
+        ...devices,
+        ...shared.where((d) => !ids.contains(d.deviceId)),
+      ];
+    }
     final cropById = {for (final c in crops) c.id: c};
 
     final bundles = <_Bundle>[];
@@ -306,13 +318,23 @@ class _FieldDashboardState extends State<FieldDashboard> {
   }
 
   Widget _unassignedCard(CloudDevice d) {
+    final shared = d.owner != widget.uid;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
         dense: true,
-        leading: const Icon(Icons.sensors),
+        leading: Icon(
+          shared ? Icons.people_outline : Icons.sensors,
+          color: shared ? Colors.blue : null,
+        ),
         title: Text(d.name),
-        subtitle: Text('Sin campo ni sector asignado'),
+        subtitle: Text(shared ? 'Compartido contigo' : 'Sin campo ni sector asignado'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CloudDeviceDetailScreen(device: d),
+          ),
+        ),
       ),
     );
   }

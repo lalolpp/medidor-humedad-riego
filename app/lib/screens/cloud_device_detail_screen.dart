@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/reading.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
+import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/csv_export.dart';
 import 'package:medidor_humedad/services/infiltration.dart';
@@ -102,6 +103,12 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
       appBar: AppBar(
         title: Text(d.name),
         actions: [
+          if (d.owner == AuthService.instance.currentUser?.uid)
+            IconButton(
+              tooltip: 'Compartir dispositivo',
+              onPressed: () => _showShareSheet(),
+              icon: const Icon(Icons.people_outline),
+            ),
           IconButton(
             tooltip: 'Exportar CSV (7 días)',
             onPressed: _exporting ? null : _exportCsv,
@@ -259,6 +266,19 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     );
   }
 
+  void _showShareSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: _ShareSheet(device: widget.device),
+      ),
+    );
+  }
+
   Widget _intervalCard(CloudDevice d) {
     return Card(
       child: Padding(
@@ -340,6 +360,161 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
           Text(value,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         ],
+      ),
+    );
+  }
+}
+
+class _ShareSheet extends StatefulWidget {
+  final CloudDevice device;
+
+  const _ShareSheet({required this.device});
+
+  @override
+  State<_ShareSheet> createState() => _ShareSheetState();
+}
+
+class _ShareSheetState extends State<_ShareSheet> {
+  late Map<String, String> _shares;
+  final _emailController = TextEditingController();
+  String _role = 'viewer';
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shares = Map.of(widget.device.shares);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addShare() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un correo válido')),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await CloudService.instance
+          .shareDevice(widget.device.deviceId, email, role: _role);
+      if (!mounted) return;
+      setState(() {
+        _shares[email.toLowerCase()] = _role;
+        _emailController.clear();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al compartir: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _removeShare(String email) async {
+    setState(() => _busy = true);
+    try {
+      await CloudService.instance.unshareDevice(widget.device.deviceId, email);
+      if (!mounted) return;
+      setState(() => _shares.remove(email));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al quitar acceso: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _roleLabel(String role) =>
+      role == 'manager' ? 'Administrador' : 'Solo lectura';
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Compartir ${widget.device.name}',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            const Text(
+              'Solo lectura: ve datos. Administrador: además configura.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            if (_shares.isNotEmpty) ...[
+              const Text('Con acceso:',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              for (final entry in _shares.entries)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(entry.key),
+                  subtitle: Text(_roleLabel(entry.value)),
+                  trailing: IconButton(
+                    tooltip: 'Quitar acceso',
+                    onPressed: _busy ? null : () => _removeShare(entry.key),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo del invitado',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _role,
+                  items: const [
+                    DropdownMenuItem(value: 'viewer', child: Text('Ver')),
+                    DropdownMenuItem(
+                        value: 'manager', child: Text('Admin')),
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (v) {
+                          if (v != null) setState(() => _role = v);
+                        },
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _busy ? null : _addShare,
+                  child: const Text('Agregar'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

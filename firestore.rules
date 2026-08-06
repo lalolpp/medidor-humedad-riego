@@ -8,6 +8,21 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol == 'admin';
     }
+    // Rol del usuario actual sobre un dispositivo (null si no tiene acceso
+    // compartido). Los accesos se comparten por email: {email: 'viewer'|'manager'}.
+    function shareRole(deviceData) {
+      return deviceData.shares != null && deviceData.shares[request.auth.token.email] != null
+        ? deviceData.shares[request.auth.token.email]
+        : null;
+    }
+    function canReadDevice(deviceId) {
+      let d = get(/databases/$(database)/documents/devices/$(deviceId)).data;
+      return d.owner == request.auth.uid || isAdmin() || shareRole(d) != null;
+    }
+    function canManageDevice(deviceId) {
+      let d = get(/databases/$(database)/documents/devices/$(deviceId)).data;
+      return d.owner == request.auth.uid || isAdmin() || shareRole(d) == 'manager';
+    }
 
     match /users/{userId} {
       // Un usuario puede leer su perfil (o cualquier admin); solo él mismo crea
@@ -23,12 +38,14 @@ service cloud.firestore {
 
     match /devices/{deviceId} {
       // Claim: cualquier usuario autenticado puede crear un dispositivo sin dueño;
-      // solo dueño o admin lee/actualiza; solo admin borra.
+      // dueño, admin o compartido (viewer/manager) lee; manager escribe.
       // El nodo (cualquier usuario autenticado) puede actualizar SOLO telemetría.
-      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow read: if isSignedIn() && (
+        resource.data.owner == request.auth.uid || isAdmin() || shareRole(resource.data) != null);
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (
         resource.data.owner == request.auth.uid || isAdmin() ||
+        shareRole(resource.data) == 'manager' ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'humidity', 'soilTemp', 'batteryLevel', 'intervalMin',
           'autonomyDays', 'lastReportAt'
@@ -37,18 +54,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /readings/{readingId} {
-        allow read: if isSignedIn() &&
-          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
+        allow read: if isSignedIn() && canReadDevice(deviceId);
         allow create: if isSignedIn();
         allow update, delete: if isAdmin();
       }
 
       match /config/{configId} {
         // Configuración remota del nodo (p. ej. intervalo de reporte/deep
-        // sleep). El nodo autenticado la lee; solo dueño o admin la escribe.
+        // sleep). El nodo autenticado la lee; dueño, admin o manager la escribe.
         allow read: if isSignedIn();
-        allow create, update, delete: if isSignedIn() &&
-          (get(/databases/$(database)/documents/devices/$(deviceId)).data.owner == request.auth.uid || isAdmin());
+        allow create, update, delete: if isSignedIn() && canManageDevice(deviceId);
       }
     }
 

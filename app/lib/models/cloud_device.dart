@@ -12,6 +12,7 @@ class CloudDevice {
   final double? autonomyDays;
   final int? intervalMin;
   final String owner;
+  final Map<String, String> shares;
 
   const CloudDevice({
     required this.deviceId,
@@ -27,6 +28,7 @@ class CloudDevice {
     this.batteryLevel,
     this.autonomyDays,
     this.intervalMin,
+    this.shares = const {},
   });
 
   factory CloudDevice.fromMap(String id, Map<String, dynamic> data) {
@@ -46,6 +48,8 @@ class CloudDevice {
       batteryLevel: (data['batteryLevel'] as num?)?.toDouble(),
       autonomyDays: (data['autonomyDays'] as num?)?.toDouble(),
       intervalMin: (data['intervalMin'] as num?)?.toInt(),
+      shares: (data['shares'] as Map<String, dynamic>? ?? {})
+          .map((k, v) => MapEntry(k, v as String? ?? 'viewer')),
     );
   }
 }

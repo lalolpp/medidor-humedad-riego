@@ -78,6 +78,37 @@ class CloudService {
     }, SetOptions(merge: true));
   }
 
+  /// Dispositivos compartidos con mi correo (visto por el usuario invitado).
+  Future<List<CloudDevice>> devicesSharedWithEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    final snapshot = await FirebaseFirestore.instance
+        .collection('devices')
+        .where('shares.$normalized', isNotEqualTo: null)
+        .get();
+    return snapshot.docs
+        .map((doc) => CloudDevice.fromMap(doc.id, doc.data()))
+        .toList();
+  }
+
+  /// Comparte (o cambia el rol de) un dispositivo con otra persona por email.
+  Future<void> shareDevice(
+    String deviceId,
+    String email, {
+    String role = 'viewer',
+  }) async {
+    final normalized = email.trim().toLowerCase();
+    await FirebaseFirestore.instance.collection('devices').doc(deviceId).update({
+      'shares.$normalized': role,
+    });
+  }
+
+  Future<void> unshareDevice(String deviceId, String email) async {
+    final normalized = email.trim().toLowerCase();
+    await FirebaseFirestore.instance.collection('devices').doc(deviceId).update({
+      'shares.$normalized': FieldValue.delete(),
+    });
+  }
+
   Future<List<Reading>> readingsFor(String deviceId,
       {int limit = 2000, DateTime? from, DateTime? to}) async {
     var query = FirebaseFirestore.instance
