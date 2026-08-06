@@ -47,7 +47,7 @@ service cloud.firestore {
         resource.data.owner == request.auth.uid || isAdmin() ||
         shareRole(resource.data) == 'manager' ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'humidity', 'soilTemp', 'batteryLevel', 'intervalMin',
+          'humidity', 'soilTemp', 'batteryLevel', 'rssi', 'intervalMin',
           'autonomyDays', 'lastReportAt'
         ])
       );

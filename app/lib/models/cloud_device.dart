@@ -11,6 +11,7 @@ class CloudDevice {
   final double? batteryLevel;
   final double? autonomyDays;
   final int? intervalMin;
+  final int? rssi;
   final String owner;
   final Map<String, String> shares;
 
@@ -28,6 +29,7 @@ class CloudDevice {
     this.batteryLevel,
     this.autonomyDays,
     this.intervalMin,
+    this.rssi,
     this.shares = const {},
   });
 
@@ -48,6 +50,7 @@ class CloudDevice {
       batteryLevel: (data['batteryLevel'] as num?)?.toDouble(),
       autonomyDays: (data['autonomyDays'] as num?)?.toDouble(),
       intervalMin: (data['intervalMin'] as num?)?.toInt(),
+      rssi: (data['rssi'] as num?)?.toInt(),
       shares: (data['shares'] as Map<String, dynamic>? ?? {})
           .map((k, v) => MapEntry(k, v as String? ?? 'viewer')),
     );

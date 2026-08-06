@@ -6,6 +6,7 @@ import 'package:medidor_humedad/models/sector.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/widgets/metrics_chart.dart';
+import 'package:medidor_humedad/widgets/signal_bars.dart';
 
 import 'cloud_device_detail_screen.dart';
 
@@ -199,7 +200,14 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
           '${needsIrrigation ? '\nRequiere riego (<${crop.irrigateBelow.toStringAsFixed(0)}%)' : ''}',
         ),
         isThreeLine: needsIrrigation,
-        trailing: const Icon(Icons.chevron_right),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SignalBars(rssi: d.rssi, size: 14),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => CloudDeviceDetailScreen(device: d),

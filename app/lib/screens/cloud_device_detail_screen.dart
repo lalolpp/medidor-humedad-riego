@@ -8,6 +8,7 @@ import 'package:medidor_humedad/services/csv_export.dart';
 import 'package:medidor_humedad/services/infiltration.dart';
 import 'package:medidor_humedad/widgets/dual_axis_chart.dart';
 import 'package:medidor_humedad/widgets/metrics_chart.dart';
+import 'package:medidor_humedad/widgets/signal_bars.dart';
 
 class CloudDeviceDetailScreen extends StatefulWidget {
   final CloudDevice device;
@@ -318,6 +319,20 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                   'Batería: ${(d.batteryLevel! * 100).clamp(0, 100).toStringAsFixed(0)}%'
                   '${d.autonomyDays != null ? ' · Autonomía: ${d.autonomyDays!.toStringAsFixed(1)} días' : ''}',
                   style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            if (d.rssi != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    SignalBars(rssi: d.rssi),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${d.rssi} dBm (último reporte)',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ),
           ],

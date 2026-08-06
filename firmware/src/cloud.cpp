@@ -115,14 +115,16 @@ static bool updateDeviceMeta(const String &token, const SensorReading &r,
                              uint16_t intervalMin, float daysNoSun) {
   String url = firestoreBase() + "/devices/" + settings().deviceId;
   url += "?updateMask.fieldPaths=humidity&updateMask.fieldPaths=soilTemp";
-  url += "&updateMask.fieldPaths=batteryLevel&updateMask.fieldPaths=intervalMin";
-  url += "&updateMask.fieldPaths=autonomyDays&updateMask.fieldPaths=lastReportAt";
+  url += "&updateMask.fieldPaths=batteryLevel&updateMask.fieldPaths=rssi";
+  url += "&updateMask.fieldPaths=intervalMin&updateMask.fieldPaths=autonomyDays";
+  url += "&updateMask.fieldPaths=lastReportAt";
 
   JsonDocument doc;
   JsonObject f = doc["fields"].to<JsonObject>();
   f["humidity"]["doubleValue"] = r.humidityPercent;
   f["soilTemp"]["doubleValue"] = isnan(r.soilTempC) ? -127.0 : r.soilTempC;
   f["batteryLevel"]["doubleValue"] = r.batteryLevel01;
+  f["rssi"]["integerValue"] = String(r.rssi);
   f["intervalMin"]["integerValue"] = String(intervalMin);
   f["autonomyDays"]["doubleValue"] = daysNoSun;
   f["lastReportAt"]["stringValue"] = isoUtcNow();
