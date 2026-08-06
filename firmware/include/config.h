@@ -21,7 +21,9 @@
 #define HISTORY_CHUNK_RECORDS 20
 
 #define FIREBASE_HOST "medidor-de-humedad-default-rtdb.firebaseio.com"
-#define FIREBASE_AUTH_TOKEN ""
+#define FIREBASE_API_KEY "AIzaSyCcqtbCigQbxkKJ7zqFxbCuaygvBYTGIYw"
+#define FIREBASE_AUTH_EMAIL "nodo@medidor.cl"
+#define FIREBASE_AUTH_PASSWORD "Medidor2026Nodo"
 
 #define BLE_DEVICE_NAME "MedidorHumedad"
 #define BLE_ADV_WINDOW_MS 30000

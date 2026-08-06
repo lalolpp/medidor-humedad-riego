@@ -48,8 +48,8 @@ y el host del firmware listos, pero falta la reconfiguración de la app.
 - [ ] **Firestore → Rules**: pegar contenido de `firestore.rules` → Publish.
 - [ ] **Realtime Database → Rules**: pegar contenido de `database.rules.json` → Publish.
 
-### 3. Firmware: token de la base de datos
-- [ ] Completar `FIREBASE_AUTH_TOKEN` en `firmware/include/config.h` (RTDB → Configuración → *Database secrets*). Sin esto el nodo no puede publicar.
+### 3. Firmware: autenticación en RTDB ✅
+- [x] Los *Database secrets* legacy ya no existen en proyectos nuevos. Se reemplazó por **Firebase Auth**: el nodo usa la cuenta `nodo@medidor.cl` (creada vía REST) y obtiene un *ID token* con `signInWithPassword`; publica con `?auth=<idToken>`. Config en `config.h` (`FIREBASE_API_KEY`, `FIREBASE_AUTH_EMAIL`, `FIREBASE_AUTH_PASSWORD`). Verificado de punta a punta y compilado OK.
 
 ### 4. Crear tu usuario admin
 - [ ] Registrarte en la app (queda `rol: user`) y en Firestore cambiar `users/{tuUid}.rol` a `"admin"`.
