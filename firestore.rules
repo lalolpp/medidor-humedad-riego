@@ -24,9 +24,16 @@ service cloud.firestore {
     match /devices/{deviceId} {
       // Claim: cualquier usuario autenticado puede crear un dispositivo sin dueño;
       // solo dueño o admin lee/actualiza; solo admin borra.
+      // El nodo (cualquier usuario autenticado) puede actualizar SOLO telemetría.
       allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
-      allow update: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (
+        resource.data.owner == request.auth.uid || isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'humidity', 'soilTemp', 'batteryLevel', 'intervalMin',
+          'autonomyDays', 'lastReportAt'
+        ])
+      );
       allow delete: if isAdmin();
 
       match /readings/{readingId} {
@@ -35,6 +42,31 @@ service cloud.firestore {
         allow create: if isSignedIn();
         allow update, delete: if isAdmin();
       }
+    }
+
+    match /fields/{fieldId} {
+      // Campos/parcelas: nombre + coordenadas para clima y agrupación de sondas.
+      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() &&
+        (resource.data.owner == request.auth.uid || isAdmin());
+
+      match /sectors/{sectorId} {
+        // Sectores de riego del campo (diseño: variedad, área, emisores).
+        allow read: if isSignedIn() &&
+          (get(/databases/$(database)/documents/fields/$(fieldId)).data.owner == request.auth.uid || isAdmin());
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() &&
+          (get(/databases/$(database)/documents/fields/$(fieldId)).data.owner == request.auth.uid || isAdmin());
+      }
+    }
+
+    match /crops/{cropId} {
+      // Perfiles de cultivo: cualquier autenticado puede crear; solo su dueño o admin escribe.
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() &&
+        (resource.data.owner == request.auth.uid || isAdmin());
     }
 
     match /alerts/{alertId} {

@@ -1,6 +1,7 @@
 class Reading {
   final DateTime timestamp;
   final double humidity;
+  final double soilTemp;
   final double batteryVoltage;
   final double batteryLevel;
   final int rssi;
@@ -8,6 +9,7 @@ class Reading {
   const Reading({
     required this.timestamp,
     required this.humidity,
+    this.soilTemp = double.nan,
     required this.batteryVoltage,
     required this.batteryLevel,
     required this.rssi,
@@ -19,6 +21,9 @@ class Reading {
     return Reading(
       timestamp: DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
       humidity: ((json['h'] ?? json['humidity']) as num?)?.toDouble() ?? 0,
+      soilTemp: ((json['temp'] ?? json['soilTemp'] ?? json['st']) as num?)
+              ?.toDouble() ??
+          double.nan,
       batteryVoltage: ((json['bV'] ?? json['batteryV']) as num?)?.toDouble() ?? 0,
       batteryLevel: ((json['bL'] ?? json['batteryLevel']) as num?)?.toDouble() ?? 1,
       rssi: (json['rssi'] as num?)?.toInt() ?? -127,

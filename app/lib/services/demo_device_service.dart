@@ -49,11 +49,14 @@ class DemoNodoConnection implements NodoConnection {
   Reading _nextReading(DateTime ts) {
     final base = 55.0 + 18.0 * math.sin(ts.millisecondsSinceEpoch / 900000);
     final humidity = (base + _random.nextDouble() * 6 - 3).clamp(0.0, 100.0);
+    final soilBase = 18.0 + 4.0 * math.sin(ts.millisecondsSinceEpoch / 5400000);
+    final soilTemp = soilBase + _random.nextDouble() * 1.5 - 0.75;
     _batteryLevel = (_batteryLevel - 0.00008).clamp(0.0, 1.0);
     final batteryV = 3.1 + _batteryLevel * 1.1;
     return Reading(
       timestamp: ts,
       humidity: humidity,
+      soilTemp: soilTemp,
       batteryVoltage: batteryV,
       batteryLevel: _batteryLevel,
       rssi: -45,

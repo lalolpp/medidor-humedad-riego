@@ -44,9 +44,10 @@ void readingsAppend(const SensorReading &r, uint16_t intervalMin) {
   if (!ready) return;
   File file = LittleFS.open(todayFile(), "a");
   if (!file) return;
-  file.printf("{\"t\":%lu,\"h\":%.1f,\"bV\":%.2f,\"bL\":%.2f,\"rssi\":%d,\"int\":%u}\n",
-              (unsigned long)r.timestampSec, r.humidityPercent, r.batteryVoltage,
-              r.batteryLevel01, r.rssi, intervalMin);
+  float st = isnan(r.soilTempC) ? -127.0f : r.soilTempC;
+  file.printf("{\"t\":%lu,\"h\":%.1f,\"st\":%.1f,\"bV\":%.2f,\"bL\":%.2f,\"rssi\":%d,\"int\":%u}\n",
+              (unsigned long)r.timestampSec, r.humidityPercent, st,
+              r.batteryVoltage, r.batteryLevel01, r.rssi, intervalMin);
   file.close();
   trimOldFiles();
 }

@@ -112,8 +112,9 @@ void bleProcess() {
 void bleSetLatestReading(const SensorReading &reading) {
   latest = reading;
   char buf[128];
-  snprintf(buf, sizeof(buf), "{\"h\":%.1f,\"bV\":%.2f,\"ts\":%lu}",
-           reading.humidityPercent, reading.batteryVoltage, (unsigned long)reading.timestampSec);
+  float st = isnan(reading.soilTempC) ? -127.0f : reading.soilTempC;
+  snprintf(buf, sizeof(buf), "{\"h\":%.1f,\"st\":%.1f,\"bV\":%.2f,\"ts\":%lu}",
+           reading.humidityPercent, st, reading.batteryVoltage, (unsigned long)reading.timestampSec);
   if (liveChr) liveChr->setValue(buf);
   snprintf(buf, sizeof(buf), "%.2fV (%.0f%%)", reading.batteryVoltage, reading.batteryLevel01 * 100.0f);
   if (batteryChr) batteryChr->setValue(buf);

@@ -4,6 +4,7 @@
 
 struct SensorReading {
   float humidityPercent;
+  float soilTempC;
   float batteryVoltage;
   float batteryLevel01;
   int32_t rssi;

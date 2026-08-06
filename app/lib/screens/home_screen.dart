@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/device.dart';
 import 'package:medidor_humedad/services/app_firebase.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/ble_device_service.dart';
-import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/demo_device_service.dart';
 import 'package:medidor_humedad/services/device_service.dart';
+import 'package:medidor_humedad/widgets/field_dashboard.dart';
 
 import 'device_detail_screen.dart';
 
@@ -21,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _demoMode = true;
   bool _scanning = false;
   List<DiscoveredDevice> _devices = [];
-  Future<List<CloudDevice>>? _cloudFuture;
+  int _dashboardVersion = 0;
 
   DeviceService get _service => _demoMode
       ? DemoDeviceService()
@@ -39,10 +38,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _loadCloud() {
     final uid = AuthService.instance.currentUser?.uid;
     if (!AppFirebase.configured || uid == null) {
-      setState(() => _cloudFuture = null);
       return;
     }
-    setState(() => _cloudFuture = CloudService.instance.myDevices(uid));
+    setState(() => _dashboardVersion++);
   }
 
   Future<void> _discover() async {
@@ -137,11 +135,15 @@ class _HomeScreenState extends State<HomeScreen> {
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Text(
-                'En la nube',
+                'Mi campo',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
-            _cloudDevices(),
+            FieldDashboard(
+              key: ValueKey(_dashboardVersion),
+              uid: user.uid,
+              onChanged: _loadCloud,
+            ),
             const Divider(height: 24),
           ],
           const Padding(
@@ -161,61 +163,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           for (final device in _devices) _deviceCard(device),
         ],
-      ),
-    );
-  }
-
-  Widget _cloudDevices() {
-    final future = _cloudFuture;
-    if (future == null) return const SizedBox.shrink();
-    return FutureBuilder<List<CloudDevice>>(
-      future: future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'No se pudo cargar la nube: ${snapshot.error}',
-              style: const TextStyle(color: Colors.orange),
-            ),
-          );
-        }
-        final devices = snapshot.data ?? [];
-        if (devices.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Aún no tienes dispositivos vinculados en la nube.',
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
-        }
-        return Column(
-          children: [for (final device in devices) _cloudCard(device)],
-        );
-      },
-    );
-  }
-
-  Widget _cloudCard(CloudDevice device) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: ListTile(
-        leading: const Icon(Icons.cloud_outlined, size: 28),
-        title: Text(device.name),
-        subtitle: Text(
-          device.lastReportAt == null
-              ? 'Sin reportes'
-              : 'Último reporte: ${device.lastReportAt!.toLocal()}'
-                  '${device.humidity != null ? '\nHumedad: ${device.humidity!.toStringAsFixed(1)}%' : ''}',
-        ),
-        isThreeLine: true,
       ),
     );
   }

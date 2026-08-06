@@ -2,6 +2,7 @@
 
 #define PIN_SOIL_SENSOR 34
 #define PIN_BATTERY_ADC 35
+#define PIN_SOIL_TEMP 27
 #define PIN_LTE_PWR 25
 
 #define BATTERY_REF_VOLTAGE 3.3f

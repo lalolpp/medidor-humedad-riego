@@ -1,7 +1,12 @@
 #include "sensor.h"
 #include "config.h"
 #include <Arduino.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <WiFi.h>
+
+static OneWire oneWire(PIN_SOIL_TEMP);
+static DallasTemperature tempSensors(&oneWire);
 
 static float readBatteryVoltage() {
   uint32_t raw = 0;
@@ -18,9 +23,17 @@ static float batteryLevel(float voltage) {
   return (voltage - empty) / (full - empty);
 }
 
+static float readSoilTemp() {
+  tempSensors.requestTemperatures();
+  float t = tempSensors.getTempCByIndex(0);
+  if (t == DEVICE_DISCONNECTED_C) return NAN;
+  return t;
+}
+
 void sensorInit() {
   analogSetPinAttenuation(PIN_SOIL_SENSOR, ADC_11db);
   analogSetPinAttenuation(PIN_BATTERY_ADC, ADC_11db);
+  tempSensors.begin();
   pinMode(PIN_LTE_PWR, OUTPUT);
   digitalWrite(PIN_LTE_PWR, LOW);
 }
@@ -31,6 +44,7 @@ SensorReading readSensor() {
   for (uint8_t i = 0; i < 8; i++) raw += analogRead(PIN_SOIL_SENSOR);
   raw /= 8;
   r.humidityPercent = 100.0f * (1.0f - (float)raw / 4095.0f);
+  r.soilTempC = readSoilTemp();
   r.batteryVoltage = readBatteryVoltage();
   r.batteryLevel01 = batteryLevel(r.batteryVoltage);
   r.rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -127;
