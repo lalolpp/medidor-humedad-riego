@@ -113,7 +113,9 @@ class _SmartDashboardState extends State<SmartDashboard> {
     _future = _load();
     _future.then((r) {
       if (!mounted) return;
-      setState(() => _historyFuture = _loadHistory(r, _historyDays));
+      setState(() {
+        _historyFuture = _loadHistory(r, _historyDays);
+      });
     });
   }
 
@@ -1957,6 +1959,7 @@ class _AmbientCard extends StatelessWidget {
         }
         final coords = snap.data;
         if (coords == null) {
+          debugPrint('[Clima] Sin coordenadas (GPS ni predio)');
           return const Text(
             'Sin coordenadas (activa el GPS o configura el predio).',
             style: TextStyle(fontSize: 12, color: kText2),
@@ -1974,12 +1977,15 @@ class _AmbientCard extends StatelessWidget {
               );
             }
             if (snap.hasError || snap.data == null) {
+              debugPrint('[Clima] Error al consultar: ${snap.error}');
               return const Text(
                 'No se pudo consultar el clima.',
                 style: TextStyle(fontSize: 12, color: kText2),
               );
             }
             final w = snap.data!;
+            debugPrint('[Clima] OK: T=${w.temperatureC} hum='
+                '${w.relativeHumidityPct}% lluvia=${w.precipitationMm}mm');
             final t = AppSettings.toDisplay(w.temperatureC);
             return Column(
               children: [
