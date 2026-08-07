@@ -1,3 +1,5 @@
+import 'automation_config.dart';
+
 class CloudDevice {
   final String deviceId;
   final String name;
@@ -14,6 +16,13 @@ class CloudDevice {
   final int? rssi;
   final String owner;
   final Map<String, String> shares;
+  final bool isDemo;
+  final AutomationConfig automation;
+  final String? automationState;
+  final String? automationReason;
+  final String? valveState;
+  final DateTime? automationStartedAt;
+  final DateTime? automationLastToggleAt;
 
   const CloudDevice({
     required this.deviceId,
@@ -31,9 +40,17 @@ class CloudDevice {
     this.intervalMin,
     this.rssi,
     this.shares = const {},
+    this.isDemo = false,
+    this.automation = const AutomationConfig(),
+    this.automationState,
+    this.automationReason,
+    this.valveState,
+    this.automationStartedAt,
+    this.automationLastToggleAt,
   });
 
   factory CloudDevice.fromMap(String id, Map<String, dynamic> data) {
+    final status = data['automationStatus'] as Map<String, dynamic>? ?? {};
     return CloudDevice(
       deviceId: id,
       name: data['name'] as String? ?? 'Medidor $id',
@@ -53,6 +70,18 @@ class CloudDevice {
       rssi: (data['rssi'] as num?)?.toInt(),
       shares: (data['shares'] as Map<String, dynamic>? ?? {})
           .map((k, v) => MapEntry(k, v as String? ?? 'viewer')),
+      isDemo: data['isDemo'] == true || id.startsWith('demo-'),
+      automation:
+          AutomationConfig.fromMap(data['automation'] as Map<String, dynamic>?),
+      automationState: status['state'] as String?,
+      automationReason: status['reason'] as String?,
+      valveState: status['valveState'] as String?,
+      automationStartedAt: status['startedAt'] != null
+          ? DateTime.tryParse(status['startedAt'] as String)
+          : null,
+      automationLastToggleAt: status['lastToggleAt'] != null
+          ? DateTime.tryParse(status['lastToggleAt'] as String)
+          : null,
     );
   }
 }

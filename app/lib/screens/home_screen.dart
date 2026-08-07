@@ -5,7 +5,7 @@ import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/ble_device_service.dart';
 import 'package:medidor_humedad/services/demo_device_service.dart';
 import 'package:medidor_humedad/services/device_service.dart';
-import 'package:medidor_humedad/widgets/field_dashboard.dart';
+import 'package:medidor_humedad/widgets/smart_dashboard.dart';
 import 'package:medidor_humedad/widgets/signal_bars.dart';
 
 import 'device_detail_screen.dart';
@@ -140,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
-            FieldDashboard(
+            SmartDashboard(
               key: ValueKey(_dashboardVersion),
               uid: user.uid,
               onChanged: _loadCloud,

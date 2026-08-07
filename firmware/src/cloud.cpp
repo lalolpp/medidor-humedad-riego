@@ -152,25 +152,32 @@ bool cloudPublish(const SensorReading &r, uint16_t intervalMin, float daysNoSun)
          updateDeviceMeta(token, r, intervalMin, daysNoSun);
 }
 
-uint16_t cloudFetchInterval(uint16_t fallback) {
-  if (!connected && !cloudLogin()) return fallback;
+// Descarga devices/{id}/config/current y lo deserializa en `doc`.
+// Devuelve false si no hay red, error HTTP o JSON inválido.
+static bool fetchConfigDoc(JsonDocument &doc) {
+  if (!connected && !cloudLogin()) return false;
 
   String token = idToken();
-  if (token.isEmpty()) return fallback;
+  if (token.isEmpty()) return false;
 
   String url = firestoreBase() + "/devices/" + settings().deviceId +
                "/config/current";
   client.setInsecure();
   HTTPClient http;
-  if (!http.begin(client, url)) return fallback;
+  if (!http.begin(client, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + token);
   int code = http.GET();
   String resp = http.getString();
   http.end();
-  if (code != 200) return fallback;
+  if (code != 200) return false;
 
+  return !deserializeJson(doc, resp);
+}
+
+uint16_t cloudFetchInterval(uint16_t fallback) {
   JsonDocument doc;
-  if (deserializeJson(doc, resp)) return fallback;
+  if (!fetchConfigDoc(doc)) return fallback;
+
   const char *s = doc["fields"]["intervalMin"]["integerValue"] | "";
   if (s[0] == '\0') return fallback;
   uint16_t v = (uint16_t)strtoul(s, nullptr, 10);
@@ -178,25 +185,18 @@ uint16_t cloudFetchInterval(uint16_t fallback) {
 }
 
 bool cloudFetchOta(String &url, String &version) {
-  if (!connected && !cloudLogin()) return false;
-
-  String token = idToken();
-  if (token.isEmpty()) return false;
-
-  String endpoint = firestoreBase() + "/devices/" + settings().deviceId +
-                    "/config/current";
-  client.setInsecure();
-  HTTPClient http;
-  if (!http.begin(client, endpoint)) return false;
-  http.addHeader("Authorization", String("Bearer ") + token);
-  int code = http.GET();
-  String resp = http.getString();
-  http.end();
-  if (code != 200) return false;
-
   JsonDocument doc;
-  if (deserializeJson(doc, resp)) return false;
+  if (!fetchConfigDoc(doc)) return false;
+
   url = doc["fields"]["otaUrl"]["stringValue"] | "";
   version = doc["fields"]["otaVersion"]["stringValue"] | "";
   return !url.isEmpty();
+}
+
+bool cloudFetchValve(String &state) {
+  JsonDocument doc;
+  if (!fetchConfigDoc(doc)) return false;
+
+  state = doc["fields"]["valveState"]["stringValue"] | "";
+  return !state.isEmpty();
 }

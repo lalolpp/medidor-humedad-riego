@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/reading.dart';
+import 'package:medidor_humedad/screens/automation_screen.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
+import 'package:medidor_humedad/services/automation_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/csv_export.dart';
 import 'package:medidor_humedad/services/infiltration.dart';
@@ -20,9 +22,11 @@ class CloudDeviceDetailScreen extends StatefulWidget {
 }
 
 class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
+  late CloudDevice _device = widget.device;
   late Future<List<Reading>> _readingsFuture;
   bool _exporting = false;
   bool _savingInterval = false;
+  bool _seedingDemo = false;
   int? _interval;
   final _otaUrlController = TextEditingController();
   final _otaVersionController = TextEditingController();
@@ -34,7 +38,32 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
   void initState() {
     super.initState();
     _readingsFuture = _loadReadings();
-    _interval = widget.device.intervalMin ?? 30;
+    _interval = _device.intervalMin ?? 30;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runAutomationCheck());
+  }
+
+  /// Evalúa las reglas de automatización con los últimos datos y refresca la
+  /// tarjeta de estado (escribe solo si el estado cambió).
+  Future<void> _runAutomationCheck() async {
+    try {
+      final coords = await _fieldCoords();
+      await AutomationService.instance
+          .checkDevice(_device.deviceId, lat: coords.$1, lon: coords.$2);
+      if (mounted) await _refreshDevice();
+    } catch (_) {}
+  }
+
+  Future<(double?, double?)> _fieldCoords() async {
+    final fieldId = _device.fieldId;
+    final uid = AuthService.instance.currentUser?.uid;
+    if (fieldId == null || uid == null) return (null, null);
+    try {
+      final fields = await CloudService.instance.myFields(uid);
+      for (final f in fields) {
+        if (f.id == fieldId) return (f.lat, f.lon);
+      }
+    } catch (_) {}
+    return (null, null);
   }
 
   @override
@@ -47,7 +76,7 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
   Future<List<Reading>> _loadReadings() {
     final since = DateTime.now().subtract(const Duration(hours: 48));
     return CloudService.instance.readingsFor(
-      widget.device.deviceId,
+      _device.deviceId,
       from: since,
       limit: 4000,
     );
@@ -58,7 +87,7 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     try {
       final since = DateTime.now().subtract(const Duration(days: 7));
       final readings = await CloudService.instance.readingsFor(
-        widget.device.deviceId,
+        _device.deviceId,
         from: since,
         limit: 20000,
       );
@@ -69,7 +98,7 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
         );
         return;
       }
-      final name = widget.device.name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final name = _device.name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
       await exportReadingsCsv(readings, '${name}_lecturas.csv');
     } catch (e) {
       if (mounted) {
@@ -89,14 +118,14 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     });
     try {
       await CloudService.instance.setIntervalConfig(
-          widget.device.deviceId, intervalMin);
+          _device.deviceId, intervalMin);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Intervalo guardado: cada $intervalMin min')),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _interval = widget.device.intervalMin ?? 30);
+      setState(() => _interval = _device.intervalMin ?? 30);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al guardar intervalo: $e')),
       );
@@ -123,7 +152,7 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     setState(() => _savingOta = true);
     try {
       await CloudService.instance.setOtaConfig(
-        widget.device.deviceId,
+        _device.deviceId,
         url: url,
         version: version,
       );
@@ -151,9 +180,87 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     return email != null && d.shares[email] == 'manager';
   }
 
+  Future<void> _refreshDevice() async {
+    final fresh = await CloudService.instance.deviceFor(_device.deviceId);
+    if (mounted && fresh != null) {
+      setState(() => _device = fresh);
+    }
+  }
+
+  Future<void> _openAutomation() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AutomationScreen(device: _device)),
+    );
+    await _runAutomationCheck();
+  }
+
+  Future<void> _seedDemo() async {
+    setState(() => _seedingDemo = true);
+    try {
+      final n = await CloudService.instance.seedDemoReadings(_device.deviceId);
+      if (!mounted) return;
+      setState(() => _readingsFuture = _loadReadings());
+      await _refreshDevice();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Se generaron $n lecturas de ejemplo')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al generar datos: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _seedingDemo = false);
+    }
+  }
+
+  Widget _demoSeedCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.science_outlined, color: Colors.teal),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Dispositivo de demostración',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Sin hardware todavía: genera lecturas simuladas (7 días) '
+              'para explorar los gráficos, el índice de infiltración y el '
+              'export CSV.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: _seedingDemo ? null : _seedDemo,
+              icon: _seedingDemo
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.data_object),
+              label: Text(_seedingDemo ? 'Generando…' : 'Generar datos de ejemplo'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final d = widget.device;
+    final d = _device;
     final suffix = AppSettings.unitSuffix();
 
     return Scaffold(
@@ -182,7 +289,14 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_device.isDemo &&
+              _device.owner == AuthService.instance.currentUser?.uid) ...[
+            _demoSeedCard(),
+            const SizedBox(height: 16),
+          ],
           _statusCard(d, suffix),
+          const SizedBox(height: 16),
+          _automationCard(d),
           const SizedBox(height: 16),
           _intervalCard(d),
           if (_canManage(d)) ...[
@@ -349,9 +463,47 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
-        child: _ShareSheet(device: widget.device),
+        child: _ShareSheet(device: _device),
       ),
     );
+  }
+
+  Widget _automationCard(CloudDevice d) {
+    final state = d.automationState;
+    final (label, icon, color) = _automationInfo(state, d.valveState);
+    return Card(
+      child: ListTile(
+        leading: Icon(icon, color: color),
+        title: const Text('Automatización de riego'),
+        subtitle: Text(
+          d.automation.enabled
+              ? '$label · umbral ${d.automation.threshold}%'
+              : 'Desactivada · toca para configurar',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: _openAutomation,
+      ),
+    );
+  }
+
+  (String, IconData, Color) _automationInfo(String? state, String? valve) {
+    if (valve == 'ON') return ('Regando', Icons.water_drop, Colors.green);
+    switch (state) {
+      case AutomationService.stateIrrigating:
+        return ('Regando', Icons.water_drop, Colors.green);
+      case AutomationService.stateRainPaused:
+        return ('Pausado por lluvia', Icons.beach_access_outlined, Colors.blue);
+      case AutomationService.stateOutsideWindow:
+        return ('Fuera del horario', Icons.schedule, Colors.orange);
+      case AutomationService.stateCooldown:
+        return ('Anti-rebote', Icons.timer_outlined, Colors.orange);
+      case AutomationService.stateDisabled:
+        return ('Desactivada', Icons.power_settings_new, Colors.grey);
+      case AutomationService.stateIdle:
+        return ('Esperando…', Icons.pause_circle_outline, Colors.teal);
+      default:
+        return ('Esperando…', Icons.pause_circle_outline, Colors.teal);
+    }
   }
 
   Widget _intervalCard(CloudDevice d) {

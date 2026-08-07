@@ -25,6 +25,25 @@ class WeatherInfo {
   const WeatherInfo({required this.daily, required this.forecastRain});
 }
 
+/// Condiciones ambientales actuales del predio (Open-Meteo).
+class CurrentConditions {
+  final double temperatureC;
+  final double relativeHumidityPct;
+  final double precipitationMm;
+  final double windSpeedKmh;
+  final double solarRadiationWm2;
+  final bool rainToday;
+
+  const CurrentConditions({
+    required this.temperatureC,
+    required this.relativeHumidityPct,
+    required this.precipitationMm,
+    required this.windSpeedKmh,
+    required this.solarRadiationWm2,
+    required this.rainToday,
+  });
+}
+
 class WeatherService {
   WeatherService._();
 
@@ -72,5 +91,41 @@ class WeatherService {
     final forecastRain = list
         .any((d) => d.precipitationProbability >= rainThresholdPct);
     return WeatherInfo(daily: list, forecastRain: forecastRain);
+  }
+
+  /// Condiciones actuales + si hoy hay lluvia prevista (≥ umbral).
+  Future<CurrentConditions> current(double lat, double lon) async {
+    final uri = Uri.parse(_base).replace(queryParameters: {
+      'latitude': '$lat',
+      'longitude': '$lon',
+      'current': 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,shortwave_radiation',
+      'daily': 'precipitation_probability_max',
+      'timezone': 'auto',
+      'forecast_days': '1',
+    });
+
+    final resp = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (resp.statusCode != 200) {
+      throw Exception('Clima: error HTTP ${resp.statusCode}');
+    }
+
+    final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+    final cur = json['current'] as Map<String, dynamic>? ?? {};
+    final pops = (json['daily'] as Map<String, dynamic>? ?? {})[
+            'precipitation_probability_max']
+        as List?;
+    final popToday =
+        (pops != null && pops.isNotEmpty ? (pops.first as num).toDouble() : 0.0);
+
+    return CurrentConditions(
+      temperatureC: (cur['temperature_2m'] as num?)?.toDouble() ?? double.nan,
+      relativeHumidityPct:
+          (cur['relative_humidity_2m'] as num?)?.toDouble() ?? 0,
+      precipitationMm: (cur['precipitation'] as num?)?.toDouble() ?? 0,
+      windSpeedKmh: (cur['wind_speed_10m'] as num?)?.toDouble() ?? 0,
+      solarRadiationWm2:
+          (cur['shortwave_radiation'] as num?)?.toDouble() ?? 0,
+      rainToday: popToday >= rainThresholdPct,
+    );
   }
 }

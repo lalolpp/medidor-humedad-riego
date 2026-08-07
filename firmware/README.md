@@ -8,12 +8,13 @@ Firmware del nodo todo-en-uno (ESP32 + LTE + sensor capacitivo), PlatformIO con 
 firmware/
 ├── platformio.ini
 ├── include/
-│   ├── config.h          # pines, batería, energía, BLE, Firebase
+│   ├── config.h          # pines, batería, energía, BLE, Firebase, válvula
 │   ├── storage.h         # ajustes en NVS
 │   ├── power.h           # autonomía por intervalo
 │   ├── sensor.h          # lectura del sensor y batería
 │   ├── readings_store.h  # historial local (LittleFS)
 │   ├── cloud.h           # publicación a Firebase (HTTPS)
+│   ├── valve.h           # relé de riego accionado por nube
 │   └── ble_service.h     # servicio GATT para la app
 └── src/
     ├── main.cpp          # ciclo: medir → guardar → publicar → ventana BLE → deep sleep
@@ -22,6 +23,7 @@ firmware/
     ├── sensor.cpp
     ├── readings_store.cpp
     ├── cloud.cpp
+    ├── valve.cpp
     └── ble_service.cpp
 ```
 
@@ -41,6 +43,24 @@ pio device monitor
 4. Publica a Firebase por HTTPS (WiFi o LTE) si está habilitado.
 5. Abre una ventana BLE (~30 s) para que la app lea en vivo, cambie el intervalo o descargue el historial.
 6. Duerme hasta el siguiente intervalo.
+
+## Riego automático (válvula)
+
+La app escribe el comando `valveState` ("ON"/"OFF") en `devices/{id}/config/current`.
+En cada ciclo el nodo lee ese comando y acciona el relé en `PIN_VALVE_RELAY` (GPIO 26):
+
+- `ON` → abre la válvula; `OFF` → la cierra.
+- Con `VALVE_KEEP_AWAKE=1` (por defecto) mientras la válvula esté abierta el nodo
+  **no duerme**: el relé queda alimentado y cada `VALVE_RECHECK_MS` (60 s) re-lee la
+  nube para detectar el apagado. Es lo correcto para un relé común (no biestable).
+- Si se usa un **relé biestable** (latch), poner `VALVE_KEEP_AWAKE=0` en `config.h`:
+  el nodo duerme normalmente y re-aplica el comando en cada despertar.
+
+> **Hardware sugerido**: relé de módulo (canal con optoacoplador) alimentado a la
+> misma fuente del nodo. Para no energizar el relé desde el pin del ESP32, usar un
+> transistor/ULN2003 o un módulo de relé de 3.3 V activo ALTO. Confirmar en terreno
+> el consumo del relé mientras riega (impacta la autonomía).
+
 
 ## Intervalo y autonomía
 

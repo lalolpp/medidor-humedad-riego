@@ -13,3 +13,7 @@ node_modules/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Logs locales
+firestore-debug.log
+flutter_build*.log

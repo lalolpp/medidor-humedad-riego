@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/crop.dart';
@@ -5,6 +7,7 @@ import 'package:medidor_humedad/models/field.dart';
 import 'package:medidor_humedad/models/sector.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
+import 'package:medidor_humedad/services/automation_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/weather_service.dart';
 import 'package:medidor_humedad/screens/cloud_device_detail_screen.dart';
@@ -69,7 +72,25 @@ class _FieldDashboardState extends State<FieldDashboard> {
       bundles.add(_Bundle(f, sectors, fieldDevices));
     }
     final unassigned = devices.where((d) => d.fieldId == null).toList();
+    _runAutomation(bundles);
     return _LoadResult(fields, cropById, bundles, unassigned);
+  }
+
+  /// Evalúa la automatización de cada sonda al cargar el dashboard: con un
+  /// reporte nuevo bajo el umbral, enciende la válvula (escritura solo si el
+  /// estado cambió; anti-rebote evita ciclos cortos). Equivale al trigger
+  /// `onDeviceUpdate` de una Cloud Function, ejecutado desde la app.
+  void _runAutomation(List<_Bundle> bundles) {
+    for (final b in bundles) {
+      for (final d in b.devices) {
+        unawaited(
+          AutomationService.instance
+              .checkDevice(d.deviceId, lat: b.field.lat, lon: b.field.lon)
+              .catchError((_) => const AutomationResult(
+                  state: 'unknown', reason: 'Error de red')),
+        );
+      }
+    }
   }
 
   Future<void> _seed() async {

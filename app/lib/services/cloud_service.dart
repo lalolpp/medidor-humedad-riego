@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart' hide Field;
+import 'package:medidor_humedad/models/automation_config.dart';
 import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/crop.dart';
 import 'package:medidor_humedad/models/field.dart';
@@ -47,6 +50,7 @@ class CloudService {
       if (fieldId != null && fieldId.isNotEmpty) 'fieldId': fieldId,
       if (cropId != null && cropId.isNotEmpty) 'cropId': cropId,
       if (sectorId != null && sectorId.isNotEmpty) 'sectorId': sectorId,
+      if (deviceId.startsWith('demo-')) 'isDemo': true,
       'claimedAt': DateTime.now().toIso8601String(),
     }, SetOptions(merge: true));
   }
@@ -79,11 +83,14 @@ class CloudService {
   }
 
   /// Dispositivos compartidos con mi correo (visto por el usuario invitado).
+  /// Se busca por `sharedWith` (array de emails) porque una lista con
+  /// `where('shares.<email>', isNotEqualTo: null)` no es validable por las
+  /// reglas de Firestore (PERMISSION_DENIED en queries de lista sobre mapas).
   Future<List<CloudDevice>> devicesSharedWithEmail(String email) async {
     final normalized = email.trim().toLowerCase();
     final snapshot = await FirebaseFirestore.instance
         .collection('devices')
-        .where('shares.$normalized', isNotEqualTo: null)
+        .where('sharedWith', arrayContains: normalized)
         .get();
     return snapshot.docs
         .map((doc) => CloudDevice.fromMap(doc.id, doc.data()))
@@ -91,6 +98,8 @@ class CloudService {
   }
 
   /// Comparte (o cambia el rol de) un dispositivo con otra persona por email.
+  /// Mantiene ambos campos: `shares.<email>` (rol) y `sharedWith` (array para
+  /// que la búsqueda del invitado sea validable por las reglas).
   Future<void> shareDevice(
     String deviceId,
     String email, {
@@ -99,6 +108,7 @@ class CloudService {
     final normalized = email.trim().toLowerCase();
     await FirebaseFirestore.instance.collection('devices').doc(deviceId).update({
       'shares.$normalized': role,
+      'sharedWith': FieldValue.arrayUnion([normalized]),
     });
   }
 
@@ -106,6 +116,7 @@ class CloudService {
     final normalized = email.trim().toLowerCase();
     await FirebaseFirestore.instance.collection('devices').doc(deviceId).update({
       'shares.$normalized': FieldValue.delete(),
+      'sharedWith': FieldValue.arrayRemove([normalized]),
     });
   }
 
@@ -128,9 +139,59 @@ class CloudService {
     }, SetOptions(merge: true));
   }
 
+  /// Guarda la configuración de automatización de riego (dueño/manager).
+  Future<void> saveAutomation(String deviceId, AutomationConfig cfg) async {
+    await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(deviceId)
+        .set({'automation': cfg.toMap()}, SetOptions(merge: true));
+  }
+
+  /// Escribe el comando de válvula que el ESP32 lee en su próximo ciclo
+  /// (junto al resto de la configuración remota).
+  Future<void> setValveCommand(
+    String deviceId,
+    String valveState,
+    String reason,
+  ) async {
+    await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(deviceId)
+        .collection('config')
+        .doc('current')
+        .set({
+      'valveState': valveState,
+      'valveStateAt': DateTime.now().toIso8601String(),
+      'valveReason': reason,
+    }, SetOptions(merge: true));
+  }
+
+  /// Actualiza el estado resumido de automatización que muestra la app.
+  Future<void> updateAutomationStatus(
+    String deviceId, {
+    required String state,
+    required String reason,
+    String? valveState,
+  }) async {
+    final now = DateTime.now();
+    final map = <String, dynamic>{
+      'state': state,
+      'reason': reason,
+      'updatedAt': now.toIso8601String(),
+    };
+    if (valveState != null) {
+      map['valveState'] = valveState;
+      map['lastToggleAt'] = now.toIso8601String();
+      if (valveState == 'ON') map['startedAt'] = now.toIso8601String();
+    }
+    await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(deviceId)
+        .update({'automationStatus': map});
+  }
+
   Future<List<Reading>> readingsFor(String deviceId,
-      {int limit = 2000, DateTime? from, DateTime? to}) async {
-    var query = FirebaseFirestore.instance
+      {int limit = 2000, DateTime? from, DateTime? to}) async {    var query = FirebaseFirestore.instance
         .collection('devices')
         .doc(deviceId)
         .collection('readings') as Query;
@@ -159,6 +220,106 @@ class CloudService {
       batteryLevel: (data['batteryLevel'] as num?)?.toDouble() ?? 1,
       rssi: (data['rssi'] as num?)?.toInt() ?? -127,
     );
+  }
+
+  /// Última telemetría resumida de un dispositivo (refresca la pantalla).
+  Future<CloudDevice?> deviceFor(String deviceId) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('devices')
+        .doc(deviceId)
+        .get();
+    if (!doc.exists) return null;
+    return CloudDevice.fromMap(doc.id, doc.data() ?? {});
+  }
+
+  /// Genera lecturas simuladas (humedad, temperatura de suelo, batería y RSSI)
+  /// para el dispositivo de demostración durante `days` días, con eventos de
+  /// riego y su drenaje exponencial para que el índice de infiltración tenga
+  /// datos realistas. Reemplaza cualquier lectura previa del dispositivo.
+  Future<int> seedDemoReadings(String deviceId, {int days = 7}) async {
+    final doc = FirebaseFirestore.instance.collection('devices').doc(deviceId);
+    final readings = doc.collection('readings');
+
+    // 1) Limpiar lecturas previas del demo (regeneración limpia).
+    final previous = await readings.get();
+    if (previous.docs.isNotEmpty) {
+      final clear = FirebaseFirestore.instance.batch();
+      for (final d in previous.docs) {
+        clear.delete(d.reference);
+      }
+      await clear.commit();
+    }
+
+    // 2) Serie horaria. Riegos cada ~44 h; el último (hace 28 h) es el de
+    //    mayor aporte para que el pico máximo quede dentro de la ventana de
+    //    análisis de infiltración (48 h).
+    final now = DateTime.now();
+    final random = math.Random();
+    final events = <(double, double)>[
+      (28, 30), // hace 28 h — riego reciente (pico máximo)
+      (72, 18),
+      (116, 18),
+      (160, 18),
+    ];
+    const tau = 14.0; // horas de drenaje (constante de tiempo exponencial)
+    final hours = days * 24;
+    final batch = FirebaseFirestore.instance.batch();
+    Map<String, dynamic>? latest;
+
+    for (var i = 0; i < hours; i++) {
+      final t = now.subtract(Duration(hours: hours - 1 - i));
+      final hour = t.hour + t.minute / 60.0;
+
+      double irrigation = 0;
+      for (final (hoursAgo, amp) in events) {
+        final since = now.difference(t).inMinutes / 60.0;
+        if (since >= hoursAgo) {
+          irrigation += amp * math.exp(-(since - hoursAgo) / tau);
+        }
+      }
+      final humidity = (34.0 +
+              4.0 * math.sin(2 * math.pi * (hour - 6) / 24) +
+              irrigation +
+              random.nextDouble() * 4 -
+              2)
+          .clamp(8.0, 92.0);
+      final soilTemp = 14.0 +
+          5.0 * math.sin(2 * math.pi * (hour - 14) / 24) +
+          random.nextDouble() -
+          0.5;
+      final dayFrac = i / (hours - 1);
+      final batteryV =
+          4.15 - 0.30 * dayFrac + (random.nextDouble() * 0.03 - 0.015);
+      final batteryLevel = ((batteryV - 3.3) / 0.9).clamp(0.0, 1.0);
+      final rssi = (-68 + (random.nextInt(17) - 8)).clamp(-90, -40);
+
+      latest = {
+        'ts': t.millisecondsSinceEpoch ~/ 1000,
+        'humidity': double.parse(humidity.toStringAsFixed(1)),
+        'soilTemp': double.parse(soilTemp.toStringAsFixed(1)),
+        'batteryV': double.parse(batteryV.toStringAsFixed(2)),
+        'batteryLevel': double.parse(batteryLevel.toStringAsFixed(3)),
+        'rssi': rssi,
+        'intervalMin': 30,
+      };
+      batch.set(readings.doc(), latest);
+    }
+    await batch.commit();
+
+    // 3) Refrescar la telemetría resumida (como hace el firmware real).
+    if (latest != null) {
+      await doc.update({
+        'humidity': latest['humidity'],
+        'soilTemp': latest['soilTemp'],
+        'batteryLevel': latest['batteryLevel'],
+        'rssi': latest['rssi'],
+        'intervalMin': latest['intervalMin'],
+        'autonomyDays': 20.0,
+        'lastReportAt': now.toIso8601String(),
+        'isDemo': true,
+      });
+    }
+    return hours;
   }
 
   Future<List<Field>> myFields(String uid) async {

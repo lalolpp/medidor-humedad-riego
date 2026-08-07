@@ -15,6 +15,13 @@ service cloud.firestore {
         ? deviceData.shares[request.auth.token.email]
         : null;
     }
+    // ¿El email del usuario está en el array `sharedWith`? Este array existe
+    // para que las queries de lista del invitado sean validables por las reglas
+    // (Firestore niega listas con filtros `!= null` sobre mapas).
+    function isSharedWith(deviceData) {
+      return deviceData.sharedWith != null &&
+        request.auth.token.email in deviceData.sharedWith;
+    }
     function canReadDevice(deviceId) {
       let d = get(/databases/$(database)/documents/devices/$(deviceId)).data;
       return d.owner == request.auth.uid || isAdmin() || shareRole(d) != null;
@@ -41,7 +48,8 @@ service cloud.firestore {
       // dueño, admin o compartido (viewer/manager) lee; manager escribe.
       // El nodo (cualquier usuario autenticado) puede actualizar SOLO telemetría.
       allow read: if isSignedIn() && (
-        resource.data.owner == request.auth.uid || isAdmin() || shareRole(resource.data) != null);
+        resource.data.owner == request.auth.uid || isAdmin() ||
+        isSharedWith(resource.data) || shareRole(resource.data) != null);
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (
         resource.data.owner == request.auth.uid || isAdmin() ||
@@ -56,7 +64,9 @@ service cloud.firestore {
       match /readings/{readingId} {
         allow read: if isSignedIn() && canReadDevice(deviceId);
         allow create: if isSignedIn();
-        allow update, delete: if isAdmin();
+        // El dueño/admin/manager puede corregir o limpiar las lecturas de su
+        // propio dispositivo (p. ej. regenerar datos de demostración).
+        allow update, delete: if isSignedIn() && canManageDevice(deviceId);
       }
 
       match /config/{configId} {

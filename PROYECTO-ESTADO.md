@@ -18,6 +18,12 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   readings, config, fields, sectors, crops, alerts; compartir por email con roles).
 - RTDB creada con `database.rules.json` (respaldo).
 - `edo.electric@gmail.com` con `rol: admin`.
+- **Fingerprints de firma registrados** (Management API) para la app
+  `1:270536769377:android:d7021f9bc93066704a0f20` (`cl.riego.medidor_humedad`):
+  SHA-1 `146518c4779b736653ba0ab52c361e158068bb6d` y SHA-256
+  `80a24f954077911e232bbaf8a43d00a1fa51039dbd20d93eb366226adbc9273a`
+  (cert debug que firma el APK actual). Si se pasa a keystore propio o Play
+  App Signing, hay que registrar las nuevas huellas.
 - Deploy de reglas: `firebase deploy --only firestore:rules --project medidor-de-humedad`.
 - `firebase.json` y `firestore.indexes.json` en la raíz del repo.
 
@@ -47,33 +53,71 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   reporte configurable**, **compartir dispositivo por email** (Solo lectura/Administrador).
 - **Roles/compartir**: reglas `shares {email: role}`; viewer lee, manager escribe.
 - **Modo oscuro automático** (tema del sistema); **barras de señal RSSI** en BLE.
+- **Simulador de datos del nodo en la nube**: el detalle del dispositivo demo
+  (`isDemo`) tiene el botón "Generar datos de ejemplo" → `CloudService.seedDemoReadings`
+  crea 7 días de lecturas horarias realistas (humedad con riegos y drenaje exponencial,
+  temp de suelo, batería y RSSI) + telemetría resumida; regenera limpiando lecturas
+  previas. Regla Firestore: dueño/admin/manager puede actualizar/borrar lecturas de su
+  dispositivo (desplegado). Sin hardware, se exploran gráficos, infiltración y CSV.
 - BLE real (`flutter_blue_plus`) + modo demo; claim de dispositivo (field/sector/crop).
+- **Automatización de riego (OpenCode, sin Cloud Functions)**: `AutomationScreen` configura
+  umbral de humedad, duración, ventana horaria (incluso cruce de medianoche), pausa por
+  lluvia (Open-Meteo) y mínimo entre riegos (anti-rebote). El motor
+  `AutomationService.check` evalúa al cargar/refrescar el dashboard o el detalle del
+  dispositivo y escribe SOLO en cambios de estado: comando `valveState` (ON/OFF) en
+  `devices/{id}/config/current` (lo que el ESP32 lee) + `automationStatus` en el doc del
+  dispositivo para el indicador ("Esperando…/Regando/Pausado por lluvia/Anti-rebote").
+  Reglas validadas en emulador (dueño/manager escriben, viewer denegado, nodo lee).
+- **Firmware ejecuta `valveState` (OpenCode)**: nuevo módulo `valve.h/valve.cpp` (relé en
+  GPIO 26), `cloudFetchValve()` re-lee `config/current` y el nodo aplica el comando en cada
+  ciclo; con `VALVE_KEEP_AWAKE=1` mientras la válvula está abierta no duerme y re-chequea
+  la nube cada `VALVE_RECHECK_MS` (60 s) para detectar el apagado. Compila en ambos entornos
+  (`pio run` OK). Versión firmware 1.1.0. Falta: hardware real (relé común o biestable).
 - APK release generado: `app/build/app/outputs/flutter-apk/app-release.apk` (~52 MB).
+- **Dashboard nuevo (OpenCode, "SmartDashboard")**: rediseño completo a tema oscuro tipo SaaS
+  con identidad Gamalier — encabezado con reloj/fecha/filtro, menú por secciones, KPIs
+  (humedad promedio, temp. suelo, sensores activos, sector más seco), indicadores (mín/máx/
+  promedio semanal/riegos sugeridos), resumen por rango 0–100% con donut, tabla de sectores
+  con "Ver detalle", gráfico histórico con rango 7/14/30/60 días, condiciones ambientales
+  (Open-Meteo actual), estado del cultivo, estado energético (batería/voltaje/autonomía),
+  comunicación (RSSI/sincronización/calidad), mapa esquemático de estaciones con colores y
+  panel de alertas recientes. `WeatherService.current()` nuevo. `flutter analyze` 0 issues,
+  tests OK, APK 54.6 MB instalado.
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
-### 1. Enlace de cobertura (RSSI en nube)
+> División de trabajo: **Qwen Coder** → RSSI en nube, FCM/notificaciones,
+> revisión de código, testing. **OpenCode** → LTE A7670E, OTA en terreno,
+> automatización de riego, widgets de pantalla de inicio.
+
+### 1. Enlace de cobertura (RSSI en nube) — *Qwen*
 - [ ] Mostrar la última RSSI (de readings) en las tarjetas del dashboard y detalle de sonda,
       para diagnóstico de cobertura WiFi/LTE antes de fallas.
 
-### 2. Notificaciones push (alertas)
-- [ ] Configurar **FCM** en el proyecto y en la app (`firebase_messaging`).
+### 2. Notificaciones push (alertas) — *Qwen*
+- [x] Fingerprints SHA-1/SHA-256 registrados en Firebase (FCM ya puede autenticar la app).
+- [ ] Configurar **FCM** en la app (`firebase_messaging`) + token y canal de notificación.
 - [ ] Alertas por umbral (humedad bajo `irrigateBelow` / temp fuera de rango) y por
       helada (clima minTemp < umbral del cultivo). Hook/cloud function que notifique.
 
-### 3. Automatización de riego (válvulas/relé) — **requiere aclaración**
-- [ ] Definir cómo se implementa (¿relé en el nodo? ¿IFTTT/webhook a un programador?).
-- [ ] Regla en la app: si humedad < umbral y no hay lluvia prevista → sugerir/ejecutar riego.
+### 3. Automatización de riego (válvulas/relé) — *OpenCode* — ✅ app + firmware
+- [x] Motor de reglas en la app (`AutomationService` + `AutomationScreen`): umbral, duración,
+      ventana horaria, pausa por lluvia, anti-rebote; escribe `valveState` en `config/current`.
+- [x] **Firmware** lee `devices/{id}/config/current.valveState` en cada ciclo y acciona el
+      relé (GPIO 26), con keep-awake mientras riega. Compila (`pio run`), sin hardware aún.
+- [ ] Probar en terreno: conectar relé (común activo ALTO o biestable con `VALVE_KEEP_AWAKE=0`)
+      y verificar cierre/apertura ante comando de la app; confirmar si el relé va en el nodo
+      o hay módulo de 8 salidas por sector (en ese caso ajustar `valve.cpp` a 8 pines).
 
-### 4. Integración LTE (pendiente grande)
+### 4. Integración LTE A7670E — *OpenCode* (pendiente grande)
 - [ ] `cloud.cpp` hoy usa WiFi. Falta integrar el módulo **A7670E** (pin `PIN_LTE_PWR`)
       y publicar por LTE con SIM.
 
-### 5. OTA en terreno
+### 5. OTA en terreno — *OpenCode*
 - [ ] Flashear UNA vez por USB el env `esp32dev_ota` (esquema de particiones con 2 slots).
 - [ ] Subir el `.bin` a una URL estable y programar la actualización desde la app.
 
-### 6. Widgets de pantalla de inicio (iOS/Android)
+### 6. Widgets de pantalla de inicio (iOS/Android) — *OpenCode*
 - [ ] App Widgets que muestren humedad/temp actual sin abrir la app.
 
 ### 7. Calibración en terreno

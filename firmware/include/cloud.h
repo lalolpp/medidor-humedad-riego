@@ -13,3 +13,6 @@ uint16_t cloudFetchInterval(uint16_t fallback);
 // Lee la configuración OTA (otaUrl/otaVersion). Devuelve false si no hay
 // actualización configurada o hay error.
 bool cloudFetchOta(String &url, String &version);
+// Lee el comando de riego (valveState: "ON"/"OFF") desde config/current.
+// Devuelve false si no hay comando o hay error.
+bool cloudFetchValve(String &state);
