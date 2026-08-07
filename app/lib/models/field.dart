@@ -5,6 +5,11 @@ class Field {
   final double? lat;
   final double? lon;
   final String? cropId;
+  final String? pumpModel;
+  final String? pumpHp;
+  final String? filterType;
+  final String? filterInches;
+  final String? filterModel;
   final DateTime? createdAt;
 
   const Field({
@@ -14,6 +19,11 @@ class Field {
     this.lat,
     this.lon,
     this.cropId,
+    this.pumpModel,
+    this.pumpHp,
+    this.filterType,
+    this.filterInches,
+    this.filterModel,
     this.createdAt,
   });
 
@@ -25,6 +35,11 @@ class Field {
       lat: (data['lat'] as num?)?.toDouble(),
       lon: (data['lon'] as num?)?.toDouble(),
       cropId: data['cropId'] as String?,
+      pumpModel: data['pumpModel'] as String?,
+      pumpHp: data['pumpHp'] as String?,
+      filterType: data['filterType'] as String?,
+      filterInches: data['filterInches'] as String?,
+      filterModel: data['filterModel'] as String?,
       createdAt: data['createdAt'] != null
           ? DateTime.tryParse(data['createdAt'] as String)
           : null,

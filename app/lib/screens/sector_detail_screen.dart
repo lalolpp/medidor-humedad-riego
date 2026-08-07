@@ -57,6 +57,10 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _infoCard(s),
+          if (widget.crop != null) ...[
+            const SizedBox(height: 16),
+            _cropCard(widget.crop!),
+          ],
           const SizedBox(height: 16),
           Text('Sondas del sector (${widget.devices.length})',
               style: Theme.of(context).textTheme.titleMedium),
@@ -140,6 +144,12 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
       if (s.irrigationTimeH != null)
         ('Tiempo riego', '${s.irrigationTimeH!.toStringAsFixed(2)} h'),
       if (s.numLines != null) ('N° líneas', '${s.numLines}'),
+      if (s.rowSpacing != null)
+        ('Entre hilera', '${s.rowSpacing!.toStringAsFixed(2)} m'),
+      if (s.inRowSpacing != null)
+        ('Sobre hilera', '${s.inRowSpacing!.toStringAsFixed(1)} m'),
+      if (s.emitterSpacing != null)
+        ('Sep. emisor', '${s.emitterSpacing!.toStringAsFixed(2)} m'),
       if (s.totalFlowM3h != null)
         ('Caudal total', '${s.totalFlowM3h!.toStringAsFixed(1)} m³/h'),
       if (s.pressureMca != null)
@@ -152,6 +162,60 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            for (final (label, value) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(label,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.grey)),
+                    Text(value,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cropCard(Crop crop) {
+    final rows = <(String, String)>[
+      ('Especie/Variedad', crop.name),
+      if (crop.kc != null) ('Coef. cultivo (Kc)', '${crop.kc}'),
+      if (crop.etpMmDay != null)
+        ('ET potencial', '${crop.etpMmDay!.toStringAsFixed(1)} mm/día'),
+      if (crop.etActualMmDay != null)
+        ('ET actual', '${crop.etActualMmDay!.toStringAsFixed(2)} mm/día'),
+      if (crop.efficiencyPct != null)
+        ('Eficiencia aplicación', '${crop.efficiencyPct!.toStringAsFixed(0)}%'),
+      if (crop.laminaBrutaMmDay != null)
+        ('Lámina bruta a reponer',
+            '${crop.laminaBrutaMmDay!.toStringAsFixed(1)} mm/día'),
+      if (crop.irrigateBelow > 0)
+        ('Riego sugerido bajo', '< ${crop.irrigateBelow.toStringAsFixed(0)}%'),
+    ];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.eco_outlined, color: Colors.green),
+                const SizedBox(width: 8),
+                Text('Datos del cultivo',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 8),
             for (final (label, value) in rows)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),

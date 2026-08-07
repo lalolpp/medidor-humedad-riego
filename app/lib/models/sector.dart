@@ -12,6 +12,9 @@ class Sector {
   final int? numLines;
   final double? totalFlowM3h;
   final double? pressureMca;
+  final double? rowSpacing;
+  final double? inRowSpacing;
+  final double? emitterSpacing;
   final String? cropId;
 
   const Sector({
@@ -28,6 +31,9 @@ class Sector {
     this.numLines,
     this.totalFlowM3h,
     this.pressureMca,
+    this.rowSpacing,
+    this.inRowSpacing,
+    this.emitterSpacing,
     this.cropId,
   });
 
@@ -46,6 +52,9 @@ class Sector {
       numLines: (data['numLines'] as num?)?.toInt(),
       totalFlowM3h: (data['totalFlowM3h'] as num?)?.toDouble(),
       pressureMca: (data['pressureMca'] as num?)?.toDouble(),
+      rowSpacing: (data['rowSpacing'] as num?)?.toDouble(),
+      inRowSpacing: (data['inRowSpacing'] as num?)?.toDouble(),
+      emitterSpacing: (data['emitterSpacing'] as num?)?.toDouble(),
       cropId: data['cropId'] as String?,
     );
   }
@@ -63,6 +72,9 @@ class Sector {
         if (numLines != null) 'numLines': numLines,
         if (totalFlowM3h != null) 'totalFlowM3h': totalFlowM3h,
         if (pressureMca != null) 'pressureMca': pressureMca,
+        if (rowSpacing != null) 'rowSpacing': rowSpacing,
+        if (inRowSpacing != null) 'inRowSpacing': inRowSpacing,
+        if (emitterSpacing != null) 'emitterSpacing': emitterSpacing,
         if (cropId != null) 'cropId': cropId,
       };
 }

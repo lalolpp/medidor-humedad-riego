@@ -336,6 +336,11 @@ class CloudService {
     double? lat,
     double? lon,
     String? cropId,
+    String? pumpModel,
+    String? pumpHp,
+    String? filterType,
+    String? filterInches,
+    String? filterModel,
   }) async {
     final ref = await FirebaseFirestore.instance.collection('fields').add({
       'name': name,
@@ -343,6 +348,11 @@ class CloudService {
       'lat': ?lat,
       'lon': ?lon,
       'cropId': ?cropId,
+      'pumpModel': ?pumpModel,
+      'pumpHp': ?pumpHp,
+      'filterType': ?filterType,
+      'filterInches': ?filterInches,
+      'filterModel': ?filterModel,
       'createdAt': DateTime.now().toIso8601String(),
     });
     return ref.id;
@@ -354,12 +364,22 @@ class CloudService {
     double? lat,
     double? lon,
     String? cropId,
+    String? pumpModel,
+    String? pumpHp,
+    String? filterType,
+    String? filterInches,
+    String? filterModel,
   }) async {
     await FirebaseFirestore.instance.collection('fields').doc(fieldId).update({
       if (name != null && name.isNotEmpty) 'name': name,
       'lat': ?lat,
       'lon': ?lon,
       'cropId': ?cropId,
+      'pumpModel': ?pumpModel,
+      'pumpHp': ?pumpHp,
+      'filterType': ?filterType,
+      'filterInches': ?filterInches,
+      'filterModel': ?filterModel,
     });
   }
 
@@ -433,25 +453,22 @@ class CloudService {
   }
 
   static const _layoutSectors = [
-    // (bloques, areaHa, variedad, emisor, flujo L/h, tiempo h, lineas, caudal m3/h, presion mca)
-    ('1.3, 1.4, 1.6', 1.10, 'Manzanos', 'Goteo interior', 4.17, 2.36, 241, 43.0, 6),
-    ('1.1, 1.4, 1.5', 0.90, 'Manzanos', 'Goteo interior', 4.17, 2.36, 234, 43.0, 8),
-    ('1.7, 1.8, 1.9', 1.01, 'Manzanos', 'Goteo interior', 4.17, 2.36, 236, 36.0, 7.5),
-    ('1.10, 1.11, 1.12', 1.01, 'Manzanos', 'Goteo interior', 4.17, 2.36, 236, 36.0, 7.5),
-    ('2.3', 1.22, 'Kiwis', 'Microaspersión', 27.00, 2.63, 140, 36.0, 6),
-    ('2.1', 1.00, 'Kiwis', 'Microaspersión', 27.00, 2.63, 132, 38.0, 8),
-    ('2.2', 1.36, 'Kiwis', 'Microaspersión', 27.00, 2.63, 146, 34.0, 4),
-    ('2.4', 1.38, 'Kiwis', 'Microaspersión', 27.00, 2.63, 145, 34.0, 4),
+    // (bloques, areaHa, variedad, emisor, flujo L/h, tiempo h, lineas, caudal m3/h,
+    //  presion mca, entreHilera m, sobreHilera m, sepEmisor m)
+    ('1.3 - 1.4 - 1.6', 1.10, 'Manzanos', 'GOT.INTE', 4.17, 2.36, 2, 41.4, 36, 3.80, 1.2, 0.60),
+    ('1.1 - 1.4 - 2.1 - 1.5', 0.90, 'Manzanos', 'GOT.INTE', 4.17, 2.36, 2, 34.4, 38, 3.80, 1.2, 0.60),
+    ('1.7 - 1.8 - 1.9', 1.01, 'Manzanos', 'GOT.INTE', 4.17, 2.36, 2, 36.9, 37.5, 3.80, 1.2, 0.60),
+    ('1.10 - 1.11 - 1.12', 1.01, 'Manzanos', 'GOT.INTE', 4.17, 2.36, 2, 36.8, 37.5, 3.80, 1.2, 0.60),
+    ('2.3', 1.22, 'Kiwis', 'MICROASP', 27.00, 2.63, 1, 40.7, 36, 4.00, 2.0, 2.00),
+    ('2.1', 1.00, 'Kiwis', 'MICROASP', 27.00, 2.63, 1, 32.9, 38, 4.00, 2.0, 2.00),
+    ('2.2', 1.36, 'Kiwis', 'MICROASP', 27.00, 2.63, 1, 46.9, 34, 4.00, 2.0, 2.00),
+    ('2.4', 1.38, 'Kiwis', 'MICROASP', 27.00, 2.63, 1, 45.9, 34, 4.00, 2.0, 2.00),
   ];
 
-  /// Crea (si no existe) los perfiles Manzano/Kiwi y el campo "Nicolini 2"
-  /// con sus 8 sectores de riego según el diseño del predio.
+  /// Crea (si no existe) los perfiles Manzano/Kiwi y el campo "Nicolini"
+  /// con sus 8 sectores de riego según el diseño real del predio.
+  /// Actualiza (upsert) los datos existentes con los valores reales del campo.
   Future<void> seedFieldLayout(String uid) async {
-    final existingFields = await myFields(uid);
-    if (existingFields.any((f) => f.name.toLowerCase().contains('nicolini'))) {
-      return;
-    }
-
     final crops = await myCrops(uid);
     String? cropIdFor(String name) {
       for (final c in crops) {
@@ -460,61 +477,115 @@ class CloudService {
       return null;
     }
 
+    Crop manzano(String id, String owner) => Crop(
+          id: id,
+          name: 'Manzano',
+          owner: owner,
+          minHumidity: 40,
+          maxHumidity: 70,
+          minTemp: 8,
+          maxTemp: 32,
+          irrigateBelow: 45,
+          kc: 1.25,
+          etpMmDay: 6.3,
+          etActualMmDay: 7.8,
+          efficiencyPct: 90,
+          laminaBrutaMmDay: 8.7,
+        );
+
+    Crop kiwi(String id, String owner) => Crop(
+          id: id,
+          name: 'Kiwi',
+          owner: owner,
+          minHumidity: 50,
+          maxHumidity: 80,
+          minTemp: 5,
+          maxTemp: 30,
+          irrigateBelow: 55,
+          kc: 1.2,
+          etpMmDay: 6.3,
+          etActualMmDay: 7.56,
+          efficiencyPct: 85,
+          laminaBrutaMmDay: 8.9,
+        );
+
     var manzanoId = cropIdFor('Manzano');
-    manzanoId ??= await createCrop(
-      uid,
-      Crop(
-        id: '',
-        name: 'Manzano',
-        owner: uid,
-        minHumidity: 40,
-        maxHumidity: 70,
-        minTemp: 8,
-        maxTemp: 32,
-        irrigateBelow: 45,
-      ),
-    );
+    if (manzanoId == null) {
+      manzanoId = await createCrop(uid, manzano('', uid));
+    } else {
+      await updateCrop(manzanoId, manzano(manzanoId, uid));
+    }
 
     var kiwiId = cropIdFor('Kiwi');
-    kiwiId ??= await createCrop(
-      uid,
-      Crop(
-        id: '',
-        name: 'Kiwi',
-        owner: uid,
-        minHumidity: 50,
-        maxHumidity: 80,
-        minTemp: 5,
-        maxTemp: 30,
-        irrigateBelow: 55,
-      ),
-    );
+    if (kiwiId == null) {
+      kiwiId = await createCrop(uid, kiwi('', uid));
+    } else {
+      await updateCrop(kiwiId, kiwi(kiwiId, uid));
+    }
 
-    final fieldId = await createField(uid, 'Nicolini 2', cropId: manzanoId);
+    var fieldId = '';
+    final existingFields = await myFields(uid);
+    for (final f in existingFields) {
+      if (f.name.toLowerCase().contains('nicolini')) {
+        fieldId = f.id;
+        break;
+      }
+    }
+    if (fieldId.isEmpty) {
+      fieldId = await createField(uid, 'Nicolini',
+          cropId: manzanoId,
+          pumpModel: 'H 625 ROD 170',
+          pumpHp: '10 HP',
+          filterType: 'Metálico de malla automático',
+          filterInches: '4"',
+          filterModel: 'ODIS 851');
+    } else {
+      await updateField(fieldId,
+          pumpModel: 'H 625 ROD 170',
+          pumpHp: '10 HP',
+          filterType: 'Metálico de malla automático',
+          filterInches: '4"',
+          filterModel: 'ODIS 851');
+    }
 
+    final existing = await sectorsFor(fieldId);
     for (var i = 0; i < _layoutSectors.length; i++) {
       final s = _layoutSectors[i];
       final variety = s.$3;
       final isManzano = variety == 'Manzanos';
-      await createSector(
-        fieldId,
-        Sector(
-          id: '',
-          fieldId: fieldId,
-          number: i + 1,
-          name: 'Sector ${i + 1}',
-          variety: variety,
-          blocks: s.$1,
-          areaHa: s.$2,
-          emitterType: s.$4,
-          emitterFlowLh: s.$5,
-          irrigationTimeH: s.$6,
-          numLines: s.$7,
-          totalFlowM3h: s.$8,
-          pressureMca: s.$9.toDouble(),
-          cropId: isManzano ? manzanoId : kiwiId,
-        ),
+      final sector = Sector(
+        id: '',
+        fieldId: fieldId,
+        number: i + 1,
+        name: 'Sector ${i + 1}',
+        variety: variety,
+        blocks: s.$1,
+        areaHa: s.$2,
+        emitterType: s.$4,
+        emitterFlowLh: s.$5,
+        irrigationTimeH: s.$6,
+        numLines: s.$7,
+        totalFlowM3h: s.$8,
+        pressureMca: s.$9.toDouble(),
+        rowSpacing: s.$10,
+        inRowSpacing: s.$11,
+        emitterSpacing: s.$12,
+        cropId: isManzano ? manzanoId : kiwiId,
       );
+      final prev = existing.where((e) => e.number == sector.number).toList();
+      if (prev.isNotEmpty) {
+        await updateSector(fieldId,
+            Sector(id: prev.first.id, fieldId: fieldId, number: sector.number,
+                name: sector.name, variety: sector.variety, blocks: sector.blocks,
+                areaHa: sector.areaHa, emitterType: sector.emitterType,
+                emitterFlowLh: sector.emitterFlowLh, irrigationTimeH: sector.irrigationTimeH,
+                numLines: sector.numLines, totalFlowM3h: sector.totalFlowM3h,
+                pressureMca: sector.pressureMca, rowSpacing: sector.rowSpacing,
+                inRowSpacing: sector.inRowSpacing, emitterSpacing: sector.emitterSpacing,
+                cropId: sector.cropId));
+      } else {
+        await createSector(fieldId, sector);
+      }
     }
   }
 }

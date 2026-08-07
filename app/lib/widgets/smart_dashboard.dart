@@ -450,23 +450,21 @@ class _SmartDashboardState extends State<SmartDashboard> {
           final brand = Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [kGreen, Color(0xFF16A34A)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/logo.png',
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
                 ),
-                child: const Icon(Icons.agriculture, color: Color(0xFF06110B)),
               ),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: const [
                   Text(
-                    'Gamalier',
+                    'Nicolini',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -1322,6 +1320,13 @@ class _SmartDashboardState extends State<SmartDashboard> {
                   child: _CropStatusCard(stats: stats, crop: crop),
                 ),
               ),
+              SizedBox(
+                width: c.maxWidth - 32,
+                child: _dashCard(
+                  title: 'Equipamiento de riego',
+                  child: _EquipCard(field: firstField),
+                ),
+              ),
             ],
           ),
         );
@@ -1990,6 +1995,64 @@ class _AmbientCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---- Equipamiento de riego --------------------------------------------------
+
+class _EquipCard extends StatelessWidget {
+  final Field? field;
+  const _EquipCard({required this.field});
+
+  @override
+  Widget build(BuildContext context) {
+    final f = field;
+    final rows = <(IconData, Color, String, String)>[
+      if (f?.pumpModel != null)
+        (Icons.settings_backup_restore, kBlue, 'Bomba', f!.pumpModel!),
+      if (f?.pumpHp != null)
+        (Icons.flash_on_outlined, kYellow, 'Potencia', '${f!.pumpHp}'),
+      if (f?.filterType != null)
+        (Icons.filter_alt_outlined, kGreen, 'Filtro', f!.filterType!),
+      if (f?.filterInches != null)
+        (Icons.straighten, kOrange, 'Entrada', '${f!.filterInches}'),
+      if (f?.filterModel != null)
+        (Icons.qr_code_2, kText2, 'Modelo filtro', f!.filterModel!),
+    ];
+    if (rows.isEmpty) {
+      return const Text(
+        'Sin datos de equipamiento.',
+        style: TextStyle(fontSize: 12, color: kText2),
+      );
+    }
+    return Column(
+      children: [
+        for (final (icon, color, label, value) in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(fontSize: 12, color: kText2),
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: kText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
