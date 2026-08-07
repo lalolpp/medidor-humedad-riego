@@ -6,7 +6,6 @@ import 'package:medidor_humedad/services/ble_device_service.dart';
 import 'package:medidor_humedad/services/demo_device_service.dart';
 import 'package:medidor_humedad/services/device_service.dart';
 import 'package:medidor_humedad/widgets/smart_dashboard.dart';
-import 'package:medidor_humedad/widgets/signal_bars.dart';
 
 import 'device_detail_screen.dart';
 
@@ -175,14 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
         leading: const Icon(Icons.sensors, size: 32),
         title: Text(device.name),
         subtitle: Text('RSSI: ${device.rssi} dBm'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SignalBars(rssi: device.rssi),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
+        trailing: const Icon(Icons.chevron_right),
         onTap: () => _openDevice(device),
       ),
     );

@@ -442,9 +442,12 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                   children: [
                     SignalBars(rssi: d.rssi),
                     const SizedBox(width: 8),
-                    Text(
-                      '${d.rssi} dBm (último reporte)',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    Expanded(
+                      child: Text(
+                        '${d.rssi} dBm (último reporte)',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
                   ],
                 ),

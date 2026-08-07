@@ -1646,9 +1646,13 @@ class _SmartDashboardState extends State<SmartDashboard> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(fontSize: 11, color: kText3),
+        Flexible(
+          child: Text(
+            '$label: ',
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: const TextStyle(fontSize: 11, color: kText3),
+          ),
         ),
         Expanded(
           child: Text(
@@ -2084,14 +2088,19 @@ class _EquipCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 12, color: kText2),
                   ),
                 ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: kText,
-                  ),
-                ),
+          Flexible(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: kText,
+              ),
+            ),
+          ),
               ],
             ),
           ),
