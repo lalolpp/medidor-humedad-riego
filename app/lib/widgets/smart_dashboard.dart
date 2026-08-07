@@ -13,6 +13,7 @@ import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/automation_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
+import 'package:medidor_humedad/services/location_service.dart';
 import 'package:medidor_humedad/services/weather_service.dart';
 import 'package:medidor_humedad/widgets/dashboard_alerts.dart';
 import 'package:medidor_humedad/widgets/dashboard_charts.dart';
@@ -1309,13 +1310,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                 width: w,
                 child: _dashCard(
                   title: 'Condiciones ambientales',
-                  child: firstField?.lat == null
-                      ? const Text(
-                          'Sin coordenadas del predio',
-                          style: TextStyle(fontSize: 12, color: kText2),
-                        )
-                      : _AmbientCard(
-                          lat: firstField!.lat!, lon: firstField.lon!),
+                  child: _AmbientCard(
+                    fieldLat: firstField?.lat, fieldLon: firstField?.lon),
                 ),
               ),
               SizedBox(
@@ -1930,14 +1926,26 @@ class _NextRiego {
 // ---- Tarjeta de condiciones ambientales (Open-Meteo) ------------------------
 
 class _AmbientCard extends StatelessWidget {
-  final double lat;
-  final double lon;
-  const _AmbientCard({required this.lat, required this.lon});
+  final double? fieldLat;
+  final double? fieldLon;
+  const _AmbientCard({this.fieldLat, this.fieldLon});
+
+  /// Resuelve las coordenadas: GPS del dispositivo si está disponible,
+  /// en caso contrario las coordenadas guardadas del predio.
+  static Future<({double lat, double lon, bool fromGps})?> _resolve(
+      double? fieldLat, double? fieldLon) async {
+    final gps = await LocationService.instance.getPosition();
+    if (gps != null) return (lat: gps.lat, lon: gps.lon, fromGps: true);
+    if (fieldLat != null && fieldLon != null) {
+      return (lat: fieldLat, lon: fieldLon, fromGps: false);
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<CurrentConditions>(
-      future: WeatherService.instance.current(lat, lon),
+    return FutureBuilder<({double lat, double lon, bool fromGps})?>(
+      future: _resolve(fieldLat, fieldLon),
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const SizedBox(
@@ -1947,32 +1955,55 @@ class _AmbientCard extends StatelessWidget {
             ),
           );
         }
-        if (snap.hasError || snap.data == null) {
+        final coords = snap.data;
+        if (coords == null) {
           return const Text(
-            'No se pudo consultar el clima.',
+            'Sin coordenadas (activa el GPS o configura el predio).',
             style: TextStyle(fontSize: 12, color: kText2),
           );
         }
-        final w = snap.data!;
-        final t = AppSettings.toDisplay(w.temperatureC);
-        return Column(
-          children: [
-            _ambRow(Icons.thermostat, kOrange,
-                '${t.toStringAsFixed(1)}${AppSettings.unitSuffix()}',
-                'Temperatura ambiente'),
-            _ambRow(Icons.water_drop_outlined, kBlue,
-                '${w.relativeHumidityPct.toStringAsFixed(0)}%',
-                'Humedad relativa'),
-            _ambRow(Icons.umbrella_outlined, kBlue,
-                '${w.precipitationMm.toStringAsFixed(1)} mm'
-                    '${w.rainToday ? ' · lluvia' : ''}',
-                'Lluvia (hoy)'),
-            _ambRow(Icons.wb_sunny_outlined, kYellow,
-                '${w.solarRadiationWm2.toStringAsFixed(0)} W/m²',
-                'Radiación solar'),
-            _ambRow(Icons.air, kText2, '${w.windSpeedKmh.toStringAsFixed(0)} km/h',
-                'Viento'),
-          ],
+        return FutureBuilder<CurrentConditions>(
+          future: WeatherService.instance.current(coords.lat, coords.lon),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const SizedBox(
+                height: 120,
+                child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+            if (snap.hasError || snap.data == null) {
+              return const Text(
+                'No se pudo consultar el clima.',
+                style: TextStyle(fontSize: 12, color: kText2),
+              );
+            }
+            final w = snap.data!;
+            final t = AppSettings.toDisplay(w.temperatureC);
+            return Column(
+              children: [
+                _ambRow(Icons.thermostat, kOrange,
+                    '${t.toStringAsFixed(1)}${AppSettings.unitSuffix()}',
+                    'Temperatura ambiente'),
+                _ambRow(Icons.water_drop_outlined, kBlue,
+                    '${w.relativeHumidityPct.toStringAsFixed(0)}%',
+                    'Humedad relativa'),
+                _ambRow(Icons.umbrella_outlined, kBlue,
+                    '${w.precipitationMm.toStringAsFixed(1)} mm'
+                        '${w.rainToday ? ' · lluvia' : ''}',
+                    'Lluvia (hoy)'),
+                _ambRow(Icons.wb_sunny_outlined, kYellow,
+                    '${w.solarRadiationWm2.toStringAsFixed(0)} W/m²',
+                    'Radiación solar'),
+                _ambRow(Icons.air, kText2,
+                    '${w.windSpeedKmh.toStringAsFixed(0)} km/h', 'Viento'),
+                _ambRow(Icons.location_on_outlined, kText3,
+                    coords.fromGps ? 'GPS del teléfono' : 'Coordenadas predio',
+                    'Ubicación'),
+              ],
+            );
+          },
         );
       },
     );
