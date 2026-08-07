@@ -893,49 +893,55 @@ class _SmartDashboardState extends State<SmartDashboard> {
         s.sectorStats.where((e) => e.statusColor == kRed).length;
     final lowest = _driestSector(s);
 
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = (c.maxWidth - 16 - 24) / 2;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              _miniStat(w, Icons.arrow_downward, kRed, 'Humedad mín',
-                  minH.isNaN ? '—' : '${minH.toStringAsFixed(1)}%'),
-              _miniStat(w, Icons.arrow_upward, kGreen, 'Humedad máxima',
-                  maxH.isNaN ? '—' : '${maxH.toStringAsFixed(1)}%'),
-              SizedBox(
-                width: w,
+              Expanded(
+                child: _miniStat(Icons.arrow_downward, kRed, 'Humedad mín',
+                    minH.isNaN ? '—' : '${minH.toStringAsFixed(1)}%'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniStat(Icons.arrow_upward, kGreen, 'Humedad máxima',
+                    maxH.isNaN ? '—' : '${maxH.toStringAsFixed(1)}%'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
                 child: FutureBuilder<_HistoryResult>(
                   future: _historyFuture,
                   builder: (context, snap) {
                     final weekly = snap.data?.weeklyAvg ?? double.nan;
-                    return _miniStat(w, Icons.calendar_view_week, kBlue,
+                    return _miniStat(Icons.calendar_view_week, kBlue,
                         'Promedio semanal',
                         weekly.isNaN ? '—' : '${weekly.toStringAsFixed(1)}%');
                   },
                 ),
               ),
-              _miniStat(w, Icons.opacity, kBlue,
-                  'Riegos sugeridos hoy',
-                  '$needsWater'),
-              SizedBox(
-                width: w,
-                child: FutureBuilder<_HistoryResult>(
-                  future: _historyFuture,
-                  builder: (context, snap) {
-                    final h = snap.data;
-                    return _nextRiegoCard(
-                        w, _computeRiego(lowest, h));
-                  },
-                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _miniStat(Icons.opacity, kBlue,
+                    'Riegos sugeridos hoy', '$needsWater'),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 8),
+          FutureBuilder<_HistoryResult>(
+            future: _historyFuture,
+            builder: (context, snap) {
+              final h = snap.data;
+              return _nextRiegoCard(_computeRiego(lowest, h));
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -970,10 +976,9 @@ class _SmartDashboardState extends State<SmartDashboard> {
     return _NextRiego(st.sector.name, minHours);
   }
 
-  Widget _miniStat(double w, IconData icon, Color color, String label,
-      String value) {
+  Widget _miniStat(IconData icon, Color color, String label, String value) {
     return Container(
-      width: w,
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: kCard,
@@ -1003,14 +1008,14 @@ class _SmartDashboardState extends State<SmartDashboard> {
     );
   }
 
-  Widget _nextRiegoCard(double w, _NextRiego riego) {
+  Widget _nextRiegoCard(_NextRiego riego) {
     final when = riego.needNow
         ? 'ahora'
         : riego.hours == null
             ? 'según tendencia'
             : 'en ${riego.hours!.toStringAsFixed(1)} h';
     return Container(
-      width: w,
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [kBlue, Color(0xFF2563EB)]),
@@ -1414,9 +1419,10 @@ class _SmartDashboardState extends State<SmartDashboard> {
                     children: [
                       Row(
                         children: [
-                          const Text('Señal (RSSI promedio)',
-                              style: TextStyle(fontSize: 12, color: kText2)),
-                          const Spacer(),
+                          const Expanded(
+                            child: Text('Señal (RSSI promedio)',
+                                style: TextStyle(fontSize: 12, color: kText2)),
+                          ),
                           if (avgRssi != null) ...[
                             SignalBars(rssi: avgRssi.round()),
                             const SizedBox(width: 6),
