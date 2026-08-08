@@ -8,6 +8,7 @@ import 'package:medidor_humedad/models/field.dart';
 import 'package:medidor_humedad/models/reading.dart';
 import 'package:medidor_humedad/models/sector.dart';
 import 'package:medidor_humedad/screens/cloud_device_detail_screen.dart';
+import 'package:medidor_humedad/screens/irrigation_plan_screen.dart';
 import 'package:medidor_humedad/screens/sector_detail_screen.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
@@ -393,7 +394,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _header(result),
-        _menuChips(),
+        _menuChips(result),
         if (result.unassigned.isNotEmpty) _unassignedStrip(result),
         const SizedBox(height: 8),
         _sectionLabel('Panel general', Icons.dashboard_outlined, _secDashboard),
@@ -604,7 +605,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
     );
   }
 
-  Widget _menuChips() {
+  Widget _menuChips(_LoadResult result) {
     const labels = <String>[
       'Dashboard',
       'Sectores',
@@ -646,7 +647,35 @@ class _SmartDashboardState extends State<SmartDashboard> {
                   onPressed: () => _scrollTo(keys[i]),
                 ),
               ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ActionChip(
+                avatar: const Icon(Icons.calendar_month_outlined,
+                    size: 16, color: kGreen),
+                label: const Text(
+                  'Plan de riego',
+                  style: TextStyle(color: kText2, fontSize: 12),
+                ),
+                backgroundColor: kCard,
+                side: const BorderSide(color: kBorder),
+                onPressed: () => _openPlan(result),
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openPlan(_LoadResult result) {
+    final sectors = [
+      ...result.bundles.expand((b) => b.sectors),
+    ];
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => IrrigationPlanScreen(
+          sectors: sectors,
+          crops: result.cropById,
         ),
       ),
     );
@@ -1931,7 +1960,7 @@ class _NextRiego {
 
 // ---- Tarjeta de condiciones ambientales (Open-Meteo) ------------------------
 
-class _AmbientCard extends StatelessWidget {
+class _AmbientCard extends StatefulWidget {
   final double? fieldLat;
   final double? fieldLon;
   const _AmbientCard({this.fieldLat, this.fieldLon});
@@ -1949,9 +1978,49 @@ class _AmbientCard extends StatelessWidget {
   }
 
   @override
+  State<_AmbientCard> createState() => _AmbientCardState();
+}
+
+class _ClimaData {
+  final double lat;
+  final double lon;
+  final bool fromGps;
+  final CurrentConditions w;
+  _ClimaData(this.lat, this.lon, this.fromGps, this.w);
+}
+
+class _AmbientCardState extends State<_AmbientCard> {
+  late Future<_ClimaData?> _future;
+
+  Future<_ClimaData?> _load() async {
+    final ({double lat, double lon, bool fromGps})? coords;
+    try {
+      coords = await _AmbientCard._resolve(widget.fieldLat, widget.fieldLon);
+    } catch (e) {
+      debugPrint('[Clima] Error de coordenadas: $e');
+      return null;
+    }
+    if (coords == null) return null;
+    final w = await WeatherService.instance.current(coords.lat, coords.lon);
+    return _ClimaData(coords.lat, coords.lon, coords.fromGps, w);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return FutureBuilder<({double lat, double lon, bool fromGps})?>(
-      future: _resolve(fieldLat, fieldLon),
+    return FutureBuilder<_ClimaData?>(
+      future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return const SizedBox(
@@ -1961,59 +2030,74 @@ class _AmbientCard extends StatelessWidget {
             ),
           );
         }
-        final coords = snap.data;
-        if (coords == null) {
+        if (snap.hasError) {
+          debugPrint('[Clima] Error al consultar: ${snap.error}');
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh, size: 18, color: kBlue),
+                  tooltip: 'Actualizar',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 32, height: 32),
+                ),
+              ),
+              const Text(
+                'No se pudo consultar el clima.',
+                style: TextStyle(fontSize: 12, color: kText2),
+              ),
+            ],
+          );
+        }
+        final data = snap.data;
+        if (data == null) {
           debugPrint('[Clima] Sin coordenadas (GPS ni predio)');
           return const Text(
             'Sin coordenadas (activa el GPS o configura el predio).',
             style: TextStyle(fontSize: 12, color: kText2),
           );
         }
-        return FutureBuilder<CurrentConditions>(
-          future: WeatherService.instance.current(coords.lat, coords.lon),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const SizedBox(
-                height: 120,
-                child: Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              );
-            }
-            if (snap.hasError || snap.data == null) {
-              debugPrint('[Clima] Error al consultar: ${snap.error}');
-              return const Text(
-                'No se pudo consultar el clima.',
-                style: TextStyle(fontSize: 12, color: kText2),
-              );
-            }
-            final w = snap.data!;
-            debugPrint('[Clima] OK: T=${w.temperatureC} hum='
-                '${w.relativeHumidityPct}% lluvia=${w.precipitationMm}mm');
-            final t = AppSettings.toDisplay(w.temperatureC);
-            return Column(
-              children: [
-                _ambRow(Icons.thermostat, kOrange,
-                    '${t.toStringAsFixed(1)}${AppSettings.unitSuffix()}',
-                    'Temperatura ambiente'),
-                _ambRow(Icons.water_drop_outlined, kBlue,
-                    '${w.relativeHumidityPct.toStringAsFixed(0)}%',
-                    'Humedad relativa'),
-                _ambRow(Icons.umbrella_outlined, kBlue,
-                    '${w.precipitationMm.toStringAsFixed(1)} mm'
-                        '${w.rainToday ? ' · lluvia' : ''}',
-                    'Lluvia (hoy)'),
-                _ambRow(Icons.wb_sunny_outlined, kYellow,
-                    '${w.solarRadiationWm2.toStringAsFixed(0)} W/m²',
-                    'Radiación solar'),
-                _ambRow(Icons.air, kText2,
-                    '${w.windSpeedKmh.toStringAsFixed(0)} km/h', 'Viento'),
-                _ambRow(Icons.location_on_outlined, kText3,
-                    coords.fromGps ? 'GPS del teléfono' : 'Coordenadas predio',
-                    'Ubicación'),
-              ],
-            );
-          },
+        final w = data.w;
+        debugPrint('[Clima] OK: T=${w.temperatureC} hum='
+            '${w.relativeHumidityPct}% lluvia=${w.precipitationMm}mm');
+        final t = AppSettings.toDisplay(w.temperatureC);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh, size: 18, color: kBlue),
+                tooltip: 'Actualizar',
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints.tightFor(width: 32, height: 32),
+              ),
+            ),
+            _ambRow(Icons.thermostat, kOrange,
+                '${t.toStringAsFixed(1)}${AppSettings.unitSuffix()}',
+                'Temperatura ambiente'),
+            _ambRow(Icons.water_drop_outlined, kBlue,
+                '${w.relativeHumidityPct.toStringAsFixed(0)}%',
+                'Humedad relativa'),
+            _ambRow(Icons.umbrella_outlined, kBlue,
+                '${w.precipitationMm.toStringAsFixed(1)} mm'
+                    '${w.rainToday ? ' · lluvia' : ''}',
+                'Lluvia (hoy)'),
+            _ambRow(Icons.wb_sunny_outlined, kYellow,
+                '${w.solarRadiationWm2.toStringAsFixed(0)} W/m²',
+                'Radiación solar'),
+            _ambRow(Icons.air, kText2,
+                '${w.windSpeedKmh.toStringAsFixed(0)} km/h', 'Viento'),
+            _ambRow(Icons.location_on_outlined, kText3,
+                data.fromGps ? 'GPS del teléfono' : 'Coordenadas predio',
+                'Ubicación'),
+          ],
         );
       },
     );
