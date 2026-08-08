@@ -16,6 +16,10 @@ class Sector {
   final double? inRowSpacing;
   final double? emitterSpacing;
   final String? cropId;
+  final double? planLaminaMmDay;
+  final int? planDaysPerWeek;
+  final int? planTurns;
+  final double? planEfficiencyPct;
 
   const Sector({
     required this.id,
@@ -35,6 +39,10 @@ class Sector {
     this.inRowSpacing,
     this.emitterSpacing,
     this.cropId,
+    this.planLaminaMmDay,
+    this.planDaysPerWeek,
+    this.planTurns,
+    this.planEfficiencyPct,
   });
 
   factory Sector.fromMap(String id, String fieldId, Map<String, dynamic> data) {
@@ -56,6 +64,10 @@ class Sector {
       inRowSpacing: (data['inRowSpacing'] as num?)?.toDouble(),
       emitterSpacing: (data['emitterSpacing'] as num?)?.toDouble(),
       cropId: data['cropId'] as String?,
+      planLaminaMmDay: (data['planLaminaMmDay'] as num?)?.toDouble(),
+      planDaysPerWeek: (data['planDaysPerWeek'] as num?)?.toInt(),
+      planTurns: (data['planTurns'] as num?)?.toInt(),
+      planEfficiencyPct: (data['planEfficiencyPct'] as num?)?.toDouble(),
     );
   }
 
@@ -76,5 +88,9 @@ class Sector {
         if (inRowSpacing != null) 'inRowSpacing': inRowSpacing,
         if (emitterSpacing != null) 'emitterSpacing': emitterSpacing,
         if (cropId != null) 'cropId': cropId,
+        if (planLaminaMmDay != null) 'planLaminaMmDay': planLaminaMmDay,
+        if (planDaysPerWeek != null) 'planDaysPerWeek': planDaysPerWeek,
+        if (planTurns != null) 'planTurns': planTurns,
+        if (planEfficiencyPct != null) 'planEfficiencyPct': planEfficiencyPct,
       };
 }
