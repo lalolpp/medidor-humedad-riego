@@ -7,6 +7,10 @@ class DefaultFirebaseOptions {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
+      case TargetPlatform.windows:
+      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
+        return desktop;
       default:
         throw UnsupportedError(
           'Plataforma no soportada para Firebase: $defaultTargetPlatform',
@@ -28,6 +32,15 @@ class DefaultFirebaseOptions {
     appId: '1:270536769377:android:d7021f9bc93066704a0f20',
     messagingSenderId: '270536769377',
     projectId: 'medidor-de-humedad',
+    storageBucket: 'medidor-de-humedad.firebasestorage.app',
+  );
+
+  static const FirebaseOptions desktop = FirebaseOptions(
+    apiKey: 'AIzaSyCcqtbCigQbxkKJ7zqFxbCuaygvBYTGIYw',
+    appId: '1:270536769377:web:13d91518a31894cf4a0f20',
+    messagingSenderId: '270536769377',
+    projectId: 'medidor-de-humedad',
+    authDomain: 'medidor-de-humedad.firebaseapp.com',
     storageBucket: 'medidor-de-humedad.firebasestorage.app',
   );
 }
