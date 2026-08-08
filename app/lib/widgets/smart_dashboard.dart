@@ -95,6 +95,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
   Future<_HistoryResult>? _historyFuture;
   int _historyDays = 7;
   bool _seeding = false;
+  bool _refreshing = false;
   late DateTime _now;
   Timer? _clock;
 
@@ -157,6 +158,23 @@ class _SmartDashboardState extends State<SmartDashboard> {
         ? u!.displayName!
         : (u?.email?.split('@').first ?? 'Agricultor');
     return _LoadResult(fields, cropById, bundles, unassigned, userName);
+  }
+
+  /// Recarga todos los datos del dashboard (campos, cultivos, dispositivos,
+  /// historial) para ver las últimas actualizaciones.
+  Future<void> _refreshAll() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final r = await _load();
+      if (!mounted) return;
+      setState(() {
+        _future = Future.value(r);
+        _historyFuture = _loadHistory(r, _historyDays);
+      });
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   /// Evalúa la automatización de cada sonda al cargar el dashboard (trigger
@@ -496,6 +514,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                 _userChip(u?.email, initials),
                 const SizedBox(width: 8),
                 _filterButton(),
+                const SizedBox(width: 8),
+                _refreshButton(),
               ],
             );
           }
@@ -516,6 +536,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                   _clockChip(dateStr, timeStr),
                   const SizedBox(width: 8),
                   _filterButton(),
+                  const SizedBox(width: 8),
+                  _refreshButton(),
                 ],
               ),
             ],
@@ -602,6 +624,25 @@ class _SmartDashboardState extends State<SmartDashboard> {
       ),
       icon: const Icon(Icons.filter_list),
       tooltip: 'Filtrar',
+    );
+  }
+
+  Widget _refreshButton() {
+    return IconButton.filled(
+      onPressed: _refreshing ? null : _refreshAll,
+      style: IconButton.styleFrom(
+        backgroundColor: kCard,
+        foregroundColor: kBlue,
+        side: const BorderSide(color: kBorder),
+      ),
+      icon: _refreshing
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: kBlue),
+            )
+          : const Icon(Icons.refresh),
+      tooltip: 'Actualizar datos',
     );
   }
 
