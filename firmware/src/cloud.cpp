@@ -1,7 +1,9 @@
 #include "cloud.h"
 #include "config.h"
 #include "storage.h"
+#include "readings_store.h"
 #include <WiFi.h>
+#include <vector>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -199,4 +201,81 @@ bool cloudFetchValve(String &state) {
 
   state = doc["fields"]["valveState"]["stringValue"] | "";
   return !state.isEmpty();
+}
+
+// Envía un lote de lecturas como un commit atómico de Firestore. Cada lectura
+// va a `readings/r{ts}` (sobrescribe), por lo que reenviar es idempotente.
+static bool commitReadings(const String &token,
+                           const std::vector<StoredReading> &batch) {
+  String url = firestoreBase() + ":commit";
+  JsonDocument doc;
+  JsonArray writes = doc["writes"].to<JsonArray>();
+  for (const auto &sr : batch) {
+    char name[96];
+    snprintf(name, sizeof(name),
+             "projects/medidor-de-humedad/databases/(default)/documents/"
+             "devices/%s/readings/r%lu",
+             settings().deviceId, (unsigned long)sr.r.timestampSec);
+    JsonObject update = writes.add<JsonObject>();
+    update["name"] = name;
+    JsonObject f = update["fields"].to<JsonObject>();
+    f["humidity"]["doubleValue"] = sr.r.humidityPercent;
+    f["soilTemp"]["doubleValue"] = isnan(sr.r.soilTempC) ? -127.0 : sr.r.soilTempC;
+    f["batteryV"]["doubleValue"] = sr.r.batteryVoltage;
+    f["batteryLevel"]["doubleValue"] = sr.r.batteryLevel01;
+    f["rssi"]["integerValue"] = String(sr.r.rssi);
+    f["intervalMin"]["integerValue"] = String(sr.intervalMin);
+    f["ts"]["integerValue"] = String((long)sr.r.timestampSec);
+  }
+
+  String payload;
+  serializeJson(doc, payload);
+
+  client.setInsecure();
+  HTTPClient http;
+  if (!http.begin(client, url)) return false;
+  http.addHeader("Authorization", String("Bearer ") + token);
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST(payload);
+  http.end();
+  return code >= 200 && code < 300;
+}
+
+bool cloudBackfill(uint32_t currentTs) {
+  if (!connected && !cloudLogin()) return false;
+
+  // Transición desde firmware sin backfill: asumimos que el historial previo
+  // ya fue publicado y no se reenvía (evita duplicar lecturas ya subidas).
+  if (settings().lastSyncedTs == 0) {
+    settingsSetLastSyncedTs(currentTs);
+    return true;
+  }
+
+  String token = idToken();
+  if (token.isEmpty()) return false;
+
+  unsigned long deadline = millis() + BACKFILL_BUDGET_MS;
+  std::vector<StoredReading> batch;
+  batch.reserve(BACKFILL_BATCH_SIZE);
+
+  while (millis() < deadline) {
+    batch.clear();
+    readingsVisitRange(
+        settings().lastSyncedTs, currentTs,
+        [&batch](const StoredReading &sr) -> bool {
+          if (batch.size() < BACKFILL_BATCH_SIZE) batch.push_back(sr);
+          return batch.size() < BACKFILL_BATCH_SIZE;
+        });
+
+    if (batch.empty()) break;
+
+    if (!commitReadings(token, batch)) return false;
+
+    uint32_t last = 0;
+    for (const auto &sr : batch) {
+      if (sr.r.timestampSec > last) last = sr.r.timestampSec;
+    }
+    settingsSetLastSyncedTs(last);
+  }
+  return true;
 }

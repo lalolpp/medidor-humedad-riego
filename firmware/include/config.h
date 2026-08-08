@@ -16,7 +16,7 @@
 #define DEFAULT_DEVICE_ID "dev0001"
 
 // Versión del firmware, comparada con otaVersion remota para decidir OTA.
-#define FIRMWARE_VERSION "1.1.0"
+#define FIRMWARE_VERSION "1.2.0"
 
 #define SLEEP_CURRENT_MAH_PER_DAY 0.7f
 #define ACTIVE_MAH_PER_CYCLE 2.1f
@@ -24,6 +24,13 @@
 #define HISTORY_DIR "/history"
 #define HISTORY_MAX_FILES 30
 #define HISTORY_CHUNK_RECORDS 20
+
+// Backfill: reenvía a la nube las lecturas acumuladas en LittleFS que no se
+// pudieron publicar. BACKFILL_BUDGET_MS limita cuánto tiempo puede alargarse
+// el despertar por ciclo; BACKFILL_BATCH_SIZE limita el lote por commit
+// Firestore (la API admite hasta 500 escrituras por commit).
+#define BACKFILL_BUDGET_MS 10000
+#define BACKFILL_BATCH_SIZE 100
 
 #define FIREBASE_HOST "medidor-de-humedad-default-rtdb.firebaseio.com"
 #define FIREBASE_API_KEY "AIzaSyCcqtbCigQbxkKJ7zqFxbCuaygvBYTGIYw"

@@ -18,6 +18,7 @@ void settingsLoad() {
   prefs.getString("wifiPass", s.wifiPass, sizeof(s.wifiPass));
   prefs.getString("deviceId", s.deviceId, sizeof(s.deviceId));
   s.updatedAtSec = prefs.getUInt("updatedAt", 0);
+  s.lastSyncedTs = prefs.getUInt("lastSyncedTs", 0);
   prefs.end();
 
   if (s.deviceId[0] == '\0') {
@@ -43,4 +44,11 @@ bool settingsSetInterval(uint16_t intervalMin) {
   s.samplingIntervalMin = intervalMin;
   settingsSave();
   return true;
+}
+
+void settingsSetLastSyncedTs(uint32_t ts) {
+  s.lastSyncedTs = ts;
+  prefs.begin("settings", false);
+  prefs.putUInt("lastSyncedTs", ts);
+  prefs.end();
 }

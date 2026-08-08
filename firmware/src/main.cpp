@@ -40,7 +40,10 @@ void setup() {
           cloudFetchInterval(settings().samplingIntervalMin));
       float days = autonomyDays(settings().samplingIntervalMin,
                                 settings().batteryCapacityMah, r.batteryLevel01);
-      cloudPublish(r, settings().samplingIntervalMin, days);
+      if (cloudPublish(r, settings().samplingIntervalMin, days)) {
+        // Reenvía las lecturas que quedaron pendientes mientras no hubo red.
+        cloudBackfill(r.timestampSec);
+      }
 
 #ifdef ENABLE_OTA
       String otaUrl, otaVersion;

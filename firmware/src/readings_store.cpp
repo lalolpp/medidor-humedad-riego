@@ -1,6 +1,7 @@
 #include "readings_store.h"
 #include "config.h"
 #include <LittleFS.h>
+#include <ArduinoJson.h>
 #include <algorithm>
 #include <vector>
 
@@ -108,4 +109,58 @@ size_t readingsSerializeChunk(size_t start, char *buffer, size_t bufferLen) {
   buffer[written++] = ']';
   buffer[written] = '\0';
   return written;
+}
+
+size_t readingsVisitRange(uint32_t lowerTs, uint32_t upperTs,
+                          const std::function<bool(const StoredReading &)> &cb) {
+  if (!ready || !cb) return 0;
+  size_t visited = 0;
+
+  std::vector<String> files;
+  File dir = LittleFS.open(HISTORY_DIR);
+  if (!dir) return 0;
+  File f = dir.openNextFile();
+  while (f) {
+    if (!f.isDirectory()) files.push_back(String(f.name()));
+    f.close();
+    f = dir.openNextFile();
+  }
+  dir.close();
+  std::sort(files.begin(), files.end());
+
+  for (const String &name : files) {
+    File file = LittleFS.open(name, "r");
+    if (!file) continue;
+    String line;
+    while (file.available()) {
+      char c = (char)file.read();
+      if (c == '\n') {
+        if (line.length() > 4) {
+          JsonDocument doc;
+          if (!deserializeJson(doc, line)) {
+            StoredReading sr;
+            sr.r.timestampSec = doc["t"].as<uint32_t>();
+            sr.r.humidityPercent = doc["h"].as<float>();
+            sr.r.soilTempC = doc["st"].as<float>();
+            sr.r.batteryVoltage = doc["bV"].as<float>();
+            sr.r.batteryLevel01 = doc["bL"].as<float>();
+            sr.r.rssi = doc["rssi"].as<int32_t>();
+            sr.intervalMin = (uint16_t)doc["int"].as<uint32_t>();
+            if (sr.r.timestampSec > lowerTs && sr.r.timestampSec < upperTs) {
+              visited++;
+              if (!cb(sr)) {
+                file.close();
+                return visited;
+              }
+            }
+          }
+        }
+        line = "";
+      } else {
+        line += c;
+      }
+    }
+    file.close();
+  }
+  return visited;
 }
