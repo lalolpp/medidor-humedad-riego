@@ -433,7 +433,7 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Kc = ${IrrigationPlan.kcFor(crop).toStringAsFixed(2)} · '
+          'Kc = ${IrrigationPlan.kcFor(crop).toStringAsFixed(1)} · '
           'reposición sugerida ${IrrigationPlan.laminaFor(crop).toStringAsFixed(1)} mm/día',
           style: const TextStyle(fontSize: 11, color: kText2),
         ),
@@ -704,7 +704,7 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${r.sector.variety} · ${r.sector.areaHa.toStringAsFixed(2)} ha · '
+                    '${r.sector.variety} · ${r.sector.areaHa.toStringAsFixed(1)} ha · '
                     'ETc ${r.etcMmDay.toStringAsFixed(1)} mm/día · '
                     '${r.dailyLaminaMm.toStringAsFixed(1)} mm/día',
                     style: const TextStyle(fontSize: 11, color: kText2),
