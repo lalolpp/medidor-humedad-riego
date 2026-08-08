@@ -67,6 +67,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _discover();
   }
 
+  /// Pull-to-refresh: re-descubre dispositivos cercanos y recarga el
+  /// dashboard en la nube (campos, cultivos, sondas e historial).
+  Future<void> _handleRefresh() async {
+    await _discover();
+    _loadCloud();
+  }
+
   void _openDevice(DiscoveredDevice device) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -108,9 +115,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
           SwitchListTile(
             title: const Text('Modo demo (sin hardware)'),
             subtitle: const Text('Simula un nodo para probar la app'),
@@ -163,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           for (final device in _devices) _deviceCard(device),
         ],
+        ),
       ),
     );
   }
