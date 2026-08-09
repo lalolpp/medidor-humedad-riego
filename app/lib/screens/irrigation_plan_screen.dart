@@ -271,8 +271,10 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
         'Totales del predio',
         Column(
           children: [
-            _totalRow('Por semana', '$weekH h', '$weekM3 m³'),
-            _totalRow('Por mes', '$monthH h', '$monthM3 m³'),
+            _totalRow('Por semana', '${weekH.toStringAsFixed(1)} h',
+                '${weekM3.toStringAsFixed(0)} m³'),
+            _totalRow('Por mes', '${monthH.toStringAsFixed(1)} h',
+                '${monthM3.toStringAsFixed(0)} m³'),
             const Divider(color: kBorder, height: 16),
             Text(
               'Lámina semanal equivalente: '
