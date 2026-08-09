@@ -15,6 +15,7 @@ import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/automation_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/location_service.dart';
+import 'package:medidor_humedad/services/offline_cache.dart';
 import 'package:medidor_humedad/services/weather_service.dart';
 import 'package:medidor_humedad/widgets/dashboard_alerts.dart';
 import 'package:medidor_humedad/widgets/dashboard_charts.dart';
@@ -58,8 +59,10 @@ class _LoadResult {
   final List<_Bundle> bundles;
   final List<CloudDevice> unassigned;
   final String userName;
+  final bool fromCache;
+  final DateTime? cachedAt;
   const _LoadResult(this.fields, this.cropById, this.bundles, this.unassigned,
-      this.userName);
+      this.userName, {this.fromCache = false, this.cachedAt});
 }
 
 class _DevTrend {
@@ -128,6 +131,22 @@ class _SmartDashboardState extends State<SmartDashboard> {
   }
 
   Future<_LoadResult> _load() async {
+    try {
+      final r = await _loadFromCloud();
+      unawaited(OfflineCache.instance.save(widget.uid, _resultToJson(r)));
+      return r;
+    } catch (e) {
+      debugPrint('[Dashboard] Error de carga, intentando caché offline: $e');
+      final payload = await OfflineCache.instance.load(widget.uid);
+      if (payload != null) {
+        final cachedAt = await OfflineCache.instance.savedAt(widget.uid);
+        return _resultFromJson(payload, cachedAt);
+      }
+      rethrow;
+    }
+  }
+
+  Future<_LoadResult> _loadFromCloud() async {
     final fields = await CloudService.instance.myFields(widget.uid);
     final crops = await CloudService.instance.myCrops(widget.uid);
     var devices = await CloudService.instance.myDevices(widget.uid);
@@ -158,6 +177,61 @@ class _SmartDashboardState extends State<SmartDashboard> {
         ? u!.displayName!
         : (u?.email?.split('@').first ?? 'Agricultor');
     return _LoadResult(fields, cropById, bundles, unassigned, userName);
+  }
+
+  Map<String, dynamic> _resultToJson(_LoadResult r) {
+    return {
+      'fields': [
+        for (final f in r.fields) {'id': f.id, ...f.toMap()},
+      ],
+      'crops': [
+        for (final c in r.cropById.values) {'id': c.id, ...c.toMap()},
+      ],
+      'sectors': [
+        for (final b in r.bundles)
+          for (final s in b.sectors) {'id': s.id, ...s.toMap()},
+      ],
+      'devices': [
+        for (final b in r.bundles)
+          for (final d in b.devices) {'id': d.deviceId, ...d.toMap()},
+        for (final d in r.unassigned) {'id': d.deviceId, ...d.toMap()},
+      ],
+      'userName': r.userName,
+    };
+  }
+
+  _LoadResult _resultFromJson(Map<String, dynamic> json, DateTime? cachedAt) {
+    final fields = <Field>[
+      for (final m in json['fields'] as List? ?? [])
+        Field.fromMap(m['id'] as String,
+            (m as Map).cast<String, dynamic>()..remove('id')),
+    ];
+    final crops = <Crop>[
+      for (final m in json['crops'] as List? ?? [])
+        Crop.fromMap(m['id'] as String,
+            (m as Map).cast<String, dynamic>()..remove('id')),
+    ];
+    final sectors = <String, List<Sector>>{};
+    for (final m in json['sectors'] as List? ?? []) {
+      final map = (m as Map).cast<String, dynamic>();
+      final id = map.remove('id') as String;
+      final fieldId = map['fieldId'] as String? ?? '';
+      sectors.putIfAbsent(fieldId, () => []).add(Sector.fromMap(id, fieldId, map));
+    }
+    final devices = <CloudDevice>[
+      for (final m in json['devices'] as List? ?? [])
+        CloudDevice.fromMap(m['id'] as String,
+            (m as Map).cast<String, dynamic>()..remove('id')),
+    ];
+    final cropById = {for (final c in crops) c.id: c};
+    final bundles = <_Bundle>[
+      for (final f in fields)
+        _Bundle(f, sectors[f.id] ?? const [], devices.where((d) => d.fieldId == f.id).toList()),
+    ];
+    final unassigned = devices.where((d) => d.fieldId == null).toList();
+    final userName = json['userName'] as String? ?? 'Agricultor';
+    return _LoadResult(fields, cropById, bundles, unassigned, userName,
+        fromCache: true, cachedAt: cachedAt);
   }
 
   /// Recarga todos los datos del dashboard (campos, cultivos, dispositivos,
@@ -411,6 +485,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (result.fromCache) _offlineBanner(result),
         _header(result),
         _menuChips(result),
         if (result.unassigned.isNotEmpty) _unassignedStrip(result),
@@ -437,6 +512,36 @@ class _SmartDashboardState extends State<SmartDashboard> {
   }
 
   // ---- Encabezado -----------------------------------------------------------
+
+  Widget _offlineBanner(_LoadResult result) {
+    final when = result.cachedAt;
+    final whenText = when != null
+        ? '${when.day.toString().padLeft(2, '0')}/${when.month.toString().padLeft(2, '0')} '
+            '${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}'
+        : 'fecha desconocida';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: kOrange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kOrange.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 18, color: kOrange),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sin conexión · mostrando datos guardados del $whenText. '
+              'Los valores pueden estar desactualizados.',
+              style: const TextStyle(fontSize: 12, color: kText2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _header(_LoadResult result) {
     final u = AuthService.instance.currentUser;

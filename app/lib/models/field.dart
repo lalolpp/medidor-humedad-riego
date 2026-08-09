@@ -45,4 +45,18 @@ class Field {
           : null,
     );
   }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'owner': owner,
+        if (lat != null) 'lat': lat,
+        if (lon != null) 'lon': lon,
+        if (cropId != null) 'cropId': cropId,
+        if (pumpModel != null) 'pumpModel': pumpModel,
+        if (pumpHp != null) 'pumpHp': pumpHp,
+        if (filterType != null) 'filterType': filterType,
+        if (filterInches != null) 'filterInches': filterInches,
+        if (filterModel != null) 'filterModel': filterModel,
+        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+      };
 }

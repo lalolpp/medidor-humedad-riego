@@ -84,4 +84,32 @@ class CloudDevice {
           : null,
     );
   }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'owner': owner,
+        if (fieldId != null) 'fieldId': fieldId,
+        if (cropId != null) 'cropId': cropId,
+        if (sectorId != null) 'sectorId': sectorId,
+        if (location != null) 'location': location,
+        if (lastReportAt != null) 'lastReportAt': lastReportAt!.toIso8601String(),
+        if (humidity != null) 'humidity': humidity,
+        if (soilTemp != null) 'soilTemp': soilTemp,
+        if (batteryLevel != null) 'batteryLevel': batteryLevel,
+        if (autonomyDays != null) 'autonomyDays': autonomyDays,
+        if (intervalMin != null) 'intervalMin': intervalMin,
+        if (rssi != null) 'rssi': rssi,
+        'shares': shares,
+        'isDemo': isDemo,
+        'automation': automation.toMap(),
+        'automationStatus': {
+          if (automationState != null) 'state': automationState,
+          if (automationReason != null) 'reason': automationReason,
+          if (valveState != null) 'valveState': valveState,
+          if (automationStartedAt != null)
+            'startedAt': automationStartedAt!.toIso8601String(),
+          if (automationLastToggleAt != null)
+            'lastToggleAt': automationLastToggleAt!.toIso8601String(),
+        },
+      };
 }

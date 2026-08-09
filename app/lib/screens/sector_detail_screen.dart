@@ -28,6 +28,13 @@ class SectorDetailScreen extends StatefulWidget {
 
 class _SectorDetailScreenState extends State<SectorDetailScreen> {
   late Future<List<Reading>> _comparisonFuture;
+  int _rangeHours = 24;
+
+  static const _ranges = [
+    (hours: 24, label: '24 h'),
+    (hours: 168, label: '7 días'),
+    (hours: 720, label: '30 días'),
+  ];
 
   @override
   void initState() {
@@ -36,12 +43,21 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
   }
 
   Future<List<Reading>> _loadComparison() async {
-    final since = DateTime.now().subtract(const Duration(hours: 24));
+    final since = DateTime.now().subtract(Duration(hours: _rangeHours));
     final results = await Future.wait([
       for (final d in widget.devices)
-        CloudService.instance.readingsFor(d.deviceId, from: since, limit: 2000),
+        CloudService.instance.readingsFor(d.deviceId,
+            from: since, limit: 4000),
     ]);
     return results.expand((r) => r).toList();
+  }
+
+  void _setRange(int hours) {
+    if (_rangeHours == hours) return;
+    setState(() {
+      _rangeHours = hours;
+      _comparisonFuture = _loadComparison();
+    });
   }
 
   @override
@@ -77,8 +93,27 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
             for (final d in widget.devices) _deviceCard(d, suffix),
           const SizedBox(height: 16),
           if (widget.devices.length > 1) ...[
-            Text('Comparativa de humedad (últimas 24 h)',
-                style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Comparativa de humedad (últimas $_rangeLabel())',
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<int>(
+              segments: [
+                for (final r in _ranges)
+                  ButtonSegment(value: r.hours, label: Text(r.label)),
+              ],
+              selected: {_rangeHours},
+              onSelectionChanged: (s) => _setRange(s.first),
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
             const SizedBox(height: 8),
             FutureBuilder<List<Reading>>(
               future: _comparisonFuture,
@@ -120,11 +155,33 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
                       ],
                     ),
                 ];
-                return MetricsChart(
-                  series: series,
-                  unitLabel: '%',
-                  minY: 0,
-                  maxY: 100,
+                final threshold =
+                    (widget.crop?.irrigateBelow ?? 0) > 0
+                        ? widget.crop!.irrigateBelow
+                        : null;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MetricsChart(
+                      series: series,
+                      unitLabel: '%',
+                      minY: 0,
+                      maxY: 100,
+                      showHour: _rangeHours <= 24,
+                      thresholdY: threshold,
+                      thresholdLabel: threshold == null
+                          ? null
+                          : 'Umbral riego <${threshold.toStringAsFixed(0)}%',
+                    ),
+                    if (threshold != null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Línea roja: umbral de riego sugerido del cultivo.',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
@@ -132,6 +189,13 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
         ],
       ),
     );
+  }
+
+  String _rangeLabel() {
+    for (final r in _ranges) {
+      if (r.hours == _rangeHours) return r.label;
+    }
+    return '$_rangeHours h';
   }
 
   Widget _infoCard(Sector s) {

@@ -27,6 +27,8 @@ class MetricsChart extends StatelessWidget {
   final double? maxY;
   final bool showHour;
   final String emptyLabel;
+  final double? thresholdY;
+  final String? thresholdLabel;
 
   const MetricsChart({
     super.key,
@@ -36,6 +38,8 @@ class MetricsChart extends StatelessWidget {
     this.maxY,
     this.showHour = true,
     this.emptyLabel = 'Sin datos',
+    this.thresholdY,
+    this.thresholdLabel,
   });
 
   @override
@@ -117,6 +121,27 @@ class MetricsChart extends StatelessWidget {
             ),
           ),
           borderData: FlBorderData(show: false),
+          extraLinesData: ExtraLinesData(
+            horizontalLines: [
+              if (thresholdY != null)
+                HorizontalLine(
+                  y: thresholdY!,
+                  color: Colors.red.withValues(alpha: 0.85),
+                  strokeWidth: 1.2,
+                  dashArray: [6, 4],
+                  label: HorizontalLineLabel(
+                    show: true,
+                    alignment: Alignment.bottomRight,
+                    labelResolver: (_) => thresholdLabel ?? 'Umbral',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.red,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           titlesData: FlTitlesData(
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
