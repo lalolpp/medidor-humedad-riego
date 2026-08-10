@@ -14,6 +14,7 @@ import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/automation_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
+import 'package:medidor_humedad/services/local_notifications.dart';
 import 'package:medidor_humedad/services/location_service.dart';
 import 'package:medidor_humedad/services/offline_cache.dart';
 import 'package:medidor_humedad/services/weather_service.dart';
@@ -108,6 +109,10 @@ class _SmartDashboardState extends State<SmartDashboard> {
   final _secHistorial = GlobalKey();
   final _secAlertas = GlobalKey();
 
+  /// Sectores que ya avisaron "Requiere riego" en esta sesión (evita spamear
+  /// con cada refresco; se limpia cuando el sector vuelve sobre el umbral).
+  final Set<String> _notifiedLow = {};
+
   @override
   void initState() {
     super.initState();
@@ -134,6 +139,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
     try {
       final r = await _loadFromCloud();
       unawaited(OfflineCache.instance.save(widget.uid, _resultToJson(r)));
+      unawaited(_notifyLowHumidity(r));
       return r;
     } catch (e) {
       debugPrint('[Dashboard] Error de carga, intentando caché offline: $e');
@@ -263,6 +269,33 @@ class _SmartDashboardState extends State<SmartDashboard> {
                   state: 'unknown', reason: 'Error de red')),
         );
       }
+    }
+  }
+
+  /// Dispara notificaciones locales cuando un sector cae bajo el umbral de
+  /// riego del cultivo. Solo avisa una vez por sector hasta que se recupere.
+  Future<void> _notifyLowHumidity(_LoadResult r) async {
+    try {
+      final stats = _computeStats(r);
+      final lowNow = <String>{};
+      for (final st in stats.sectorStats) {
+        if (st.avgHum == null || st.crop == null) continue;
+        final id = st.sector.id;
+        if (st.avgHum! < st.crop!.irrigateBelow) {
+          lowNow.add(id);
+          if (!_notifiedLow.contains(id)) {
+            _notifiedLow.add(id);
+            await LocalNotificationsService.instance.showLowHumidity(
+              sectorName: st.sector.name,
+              humidity: st.avgHum!,
+              threshold: st.crop!.irrigateBelow,
+            );
+          }
+        }
+      }
+      _notifiedLow.removeWhere((id) => !lowNow.contains(id));
+    } catch (e) {
+      debugPrint('[Notif] Error al evaluar alertas locales: $e');
     }
   }
 
