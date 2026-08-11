@@ -65,6 +65,28 @@ class LocalNotificationsService {
     );
   }
 
+  /// Muestra una notificación push genérica (mensajes de la consola FCM que
+  /// llegan con la app en primer plano y no traen datos de sector).
+  Future<void> show({required String title, required String body}) async {
+    await init();
+    const android = AndroidNotificationDetails(
+      'riegos',
+      'Alertas de riego',
+      channelDescription: 'Avisos cuando un sector baja del umbral de riego',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const ios = DarwinNotificationDetails();
+    const details = NotificationDetails(android: android, iOS: ios);
+    final id = title.hashCode & 0x7fffffff;
+    await _plugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
+    );
+  }
+
   Future<void> _requestAndroidPermission() async {
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();

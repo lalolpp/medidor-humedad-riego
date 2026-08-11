@@ -10,6 +10,7 @@ import 'package:medidor_humedad/models/sector.dart';
 import 'package:medidor_humedad/screens/cloud_device_detail_screen.dart';
 import 'package:medidor_humedad/screens/irrigation_plan_screen.dart';
 import 'package:medidor_humedad/screens/sector_detail_screen.dart';
+import 'package:medidor_humedad/screens/settings_screen.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/automation_service.dart';
@@ -272,23 +273,32 @@ class _SmartDashboardState extends State<SmartDashboard> {
     }
   }
 
+  /// Umbral de riego de un sector: el propio si está definido, si no el del cultivo.
+  double _irrigateBelow(Sector s, Crop? crop) =>
+      s.irrigateBelow ?? crop?.irrigateBelow ?? 35.0;
+
+  /// Si el sector tiene desactivadas las alertas de riego (default: activas).
+  bool _alertsEnabled(Sector s) => s.alertsEnabled ?? true;
+
   /// Dispara notificaciones locales cuando un sector cae bajo el umbral de
-  /// riego del cultivo. Solo avisa una vez por sector hasta que se recupere.
+  /// riego (el del sector o el del cultivo). Solo avisa una vez por sector
+  /// hasta que se recupere.
   Future<void> _notifyLowHumidity(_LoadResult r) async {
     try {
       final stats = _computeStats(r);
       final lowNow = <String>{};
       for (final st in stats.sectorStats) {
-        if (st.avgHum == null || st.crop == null) continue;
+        if (st.avgHum == null || !_alertsEnabled(st.sector)) continue;
         final id = st.sector.id;
-        if (st.avgHum! < st.crop!.irrigateBelow) {
+        final threshold = _irrigateBelow(st.sector, st.crop);
+        if (st.avgHum! < threshold) {
           lowNow.add(id);
           if (!_notifiedLow.contains(id)) {
             _notifiedLow.add(id);
             await LocalNotificationsService.instance.showLowHumidity(
               sectorName: st.sector.name,
               humidity: st.avgHum!,
-              threshold: st.crop!.irrigateBelow,
+              threshold: threshold,
             );
           }
         }
@@ -653,6 +663,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                 const SizedBox(width: 8),
                 _filterButton(),
                 const SizedBox(width: 8),
+                _settingsButton(),
+                const SizedBox(width: 8),
                 _refreshButton(),
               ],
             );
@@ -674,6 +686,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                   _clockChip(dateStr, timeStr),
                   const SizedBox(width: 8),
                   _filterButton(),
+                  const SizedBox(width: 8),
+                  _settingsButton(),
                   const SizedBox(width: 8),
                   _refreshButton(),
                 ],
@@ -782,6 +796,28 @@ class _SmartDashboardState extends State<SmartDashboard> {
           : const Icon(Icons.refresh),
       tooltip: 'Actualizar datos',
     );
+  }
+
+  Widget _settingsButton() {
+    return IconButton.filled(
+      onPressed: _openSettings,
+      style: IconButton.styleFrom(
+        backgroundColor: kCard,
+        foregroundColor: kText2,
+        side: const BorderSide(color: kBorder),
+      ),
+      icon: const Icon(Icons.tune),
+      tooltip: 'Configuración',
+    );
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(uid: widget.uid),
+      ),
+    );
+    if (mounted) _refreshAll();
   }
 
   Widget _menuChips(_LoadResult result) {
@@ -908,11 +944,10 @@ class _SmartDashboardState extends State<SmartDashboard> {
         } else if (avgS == null) {
           sc = kOrange;
           st = 'Sin lecturas';
-        } else if (crop != null && avgS < crop.irrigateBelow) {
+        } else if (avgS < _irrigateBelow(s, crop)) {
           sc = kRed;
           st = 'Requiere riego';
-        } else if (crop != null && avgS < crop.minHumidity) {
-          sc = kOrange;
+        } else if (crop != null && avgS < crop.minHumidity) {          sc = kOrange;
           st = 'Bajo óptimo';
         } else if (maxT != null && crop != null && maxT > crop.maxTemp) {
           sc = kOrange;
@@ -1168,11 +1203,12 @@ class _SmartDashboardState extends State<SmartDashboard> {
   _NextRiego _computeRiego(_SectorStat? st, _HistoryResult? h) {
     if (st == null || st.avgHum == null) return const _NextRiego(null, null);
     final crop = st.crop;
-    if (crop != null && st.avgHum! < crop.irrigateBelow) {
+    final threshold = _irrigateBelow(st.sector, crop);
+    if (st.avgHum! < threshold) {
       return _NextRiego(st.sector.name, null, needNow: true);
     }
     if (h == null) return _NextRiego(st.sector.name, null);
-    final target = crop?.irrigateBelow ?? 35.0;
+    final target = threshold;
     double? minHours;
     for (final d in st.devices) {
       final t = h.trend[d.deviceId];
@@ -1896,13 +1932,15 @@ class _SmartDashboardState extends State<SmartDashboard> {
     final now = DateTime.now();
     for (final st in stats.sectorStats) {
       if (st.avgHum == null) continue;
-      if (st.crop != null && st.avgHum! < st.crop!.irrigateBelow) {
+      final threshold = _irrigateBelow(st.sector, st.crop);
+      if (_alertsEnabled(st.sector) &&
+          st.avgHum! < threshold) {
         alerts.add(DashAlert(
           icon: Icons.water_drop,
           color: kRed,
           title: 'Humedad baja en ${st.sector.name}',
           detail:
-              'La humedad promedio es ${st.avgHum!.toStringAsFixed(1)}% (límite de riego ${st.crop!.irrigateBelow.toStringAsFixed(0)}%).',
+              'La humedad promedio es ${st.avgHum!.toStringAsFixed(1)}% (límite de riego ${threshold.toStringAsFixed(0)}%).',
           time: _timeAgo(now),
           severity: 3,
         ));

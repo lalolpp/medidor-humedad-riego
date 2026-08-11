@@ -20,6 +20,8 @@ class Sector {
   final int? planDaysPerWeek;
   final int? planTurns;
   final double? planEfficiencyPct;
+  final double? irrigateBelow;
+  final bool? alertsEnabled;
 
   const Sector({
     required this.id,
@@ -43,6 +45,8 @@ class Sector {
     this.planDaysPerWeek,
     this.planTurns,
     this.planEfficiencyPct,
+    this.irrigateBelow,
+    this.alertsEnabled,
   });
 
   factory Sector.fromMap(String id, String fieldId, Map<String, dynamic> data) {
@@ -68,6 +72,8 @@ class Sector {
       planDaysPerWeek: (data['planDaysPerWeek'] as num?)?.toInt(),
       planTurns: (data['planTurns'] as num?)?.toInt(),
       planEfficiencyPct: (data['planEfficiencyPct'] as num?)?.toDouble(),
+      irrigateBelow: (data['irrigateBelow'] as num?)?.toDouble(),
+      alertsEnabled: data['alertsEnabled'] as bool?,
     );
   }
 
@@ -92,5 +98,7 @@ class Sector {
         if (planDaysPerWeek != null) 'planDaysPerWeek': planDaysPerWeek,
         if (planTurns != null) 'planTurns': planTurns,
         if (planEfficiencyPct != null) 'planEfficiencyPct': planEfficiencyPct,
+        if (irrigateBelow != null) 'irrigateBelow': irrigateBelow,
+        if (alertsEnabled != null) 'alertsEnabled': alertsEnabled,
       };
 }

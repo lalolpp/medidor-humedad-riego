@@ -30,6 +30,14 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
   late Future<List<Reading>> _comparisonFuture;
   int _rangeHours = 24;
 
+  /// Umbral de riego: el propio del sector si está definido, si no el del cultivo.
+  double? get _threshold {
+    final own = widget.sector.irrigateBelow;
+    if (own != null) return own;
+    final crop = widget.crop?.irrigateBelow;
+    return (crop ?? 0) > 0 ? crop : null;
+  }
+
   static const _ranges = [
     (hours: 24, label: '24 h'),
     (hours: 168, label: '7 días'),
@@ -155,10 +163,7 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
                       ],
                     ),
                 ];
-                final threshold =
-                    (widget.crop?.irrigateBelow ?? 0) > 0
-                        ? widget.crop!.irrigateBelow
-                        : null;
+                final threshold = _threshold;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -261,8 +266,8 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
       if (crop.laminaBrutaMmDay != null)
         ('Lámina bruta a reponer',
             '${crop.laminaBrutaMmDay!.toStringAsFixed(1)} mm/día'),
-      if (crop.irrigateBelow > 0)
-        ('Riego sugerido bajo', '< ${crop.irrigateBelow.toStringAsFixed(0)}%'),
+      if (_threshold != null)
+        ('Riego sugerido bajo', '< ${_threshold!.toStringAsFixed(0)}%'),
     ];
 
     return Card(
@@ -303,12 +308,11 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
   }
 
   Widget _deviceCard(CloudDevice d, String suffix) {
-    final crop = widget.crop;
+    final threshold = _threshold;
     final hum = d.humidity;
     final soilTemp = d.soilTemp;
-    final needsIrrigation = crop != null &&
-        hum != null &&
-        hum < crop.irrigateBelow;
+    final needsIrrigation =
+        threshold != null && hum != null && hum < threshold;
 
     final tempText = (soilTemp == null || soilTemp.isNaN)
         ? ''
@@ -325,7 +329,7 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
         subtitle: Text(
           'Humedad: ${hum == null ? '—' : '${hum.toStringAsFixed(1)}%'}'
           '$tempText'
-          '${needsIrrigation ? '\nRequiere riego (<${crop.irrigateBelow.toStringAsFixed(0)}%)' : ''}',
+          '${needsIrrigation ? '\nRequiere riego (<${threshold.toStringAsFixed(0)}%)' : ''}',
         ),
         isThreeLine: needsIrrigation,
         trailing: Row(

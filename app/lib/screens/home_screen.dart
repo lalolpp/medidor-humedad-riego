@@ -5,6 +5,7 @@ import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/ble_device_service.dart';
 import 'package:medidor_humedad/services/demo_device_service.dart';
 import 'package:medidor_humedad/services/device_service.dart';
+import 'package:medidor_humedad/services/push_notifications.dart';
 import 'package:medidor_humedad/widgets/smart_dashboard.dart';
 
 import 'device_detail_screen.dart';
@@ -29,6 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    final uid = AuthService.instance.currentUser?.uid;
+    if (AppFirebase.configured && uid != null) {
+      PushService.instance.init(uid);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _discover();
       _loadCloud();

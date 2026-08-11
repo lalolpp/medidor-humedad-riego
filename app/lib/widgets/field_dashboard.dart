@@ -242,12 +242,13 @@ class _FieldDashboardState extends State<FieldDashboard> {
     final minTemp =
         temps.isEmpty ? null : temps.reduce((a, b) => a < b ? a : b);
 
+    final threshold = s.irrigateBelow ?? crop?.irrigateBelow;
     final Color statusColor;
     final String statusText;
     if (devices.isEmpty) {
       statusColor = Colors.grey;
       statusText = 'Sin sondas';
-    } else if (crop != null && avgHum != null && avgHum < crop.irrigateBelow) {
+    } else if (threshold != null && avgHum != null && avgHum < threshold) {
       statusColor = Colors.red;
       statusText = 'Requiere riego';
     } else if (avgHum == null) {

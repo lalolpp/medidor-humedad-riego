@@ -34,6 +34,8 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
   int _editDays = 3;
   int _editTurns = 1;
   double _editEff = 85;
+  double? _editIrrigateBelow;
+  bool _editAlerts = true;
 
   @override
   void initState() {
@@ -72,6 +74,8 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
         IrrigationPlan.daysPerWeekFor(_eto * IrrigationPlan.kcFor(crop));
     _editTurns = s.planTurns ?? 1;
     _editEff = s.planEfficiencyPct ?? IrrigationPlan.efficiencyFor(crop);
+    _editIrrigateBelow = s.irrigateBelow;
+    _editAlerts = s.alertsEnabled ?? true;
   }
 
   Sector _buildEditedSector(Sector s, {bool clearPlan = false}) {
@@ -97,6 +101,8 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
       planDaysPerWeek: clearPlan ? null : _editDays,
       planTurns: clearPlan ? null : _editTurns,
       planEfficiencyPct: clearPlan ? null : _editEff,
+      irrigateBelow: clearPlan ? null : _editIrrigateBelow,
+      alertsEnabled: clearPlan ? null : _editAlerts,
     );
   }
 
@@ -430,6 +436,59 @@ class _IrrigationPlanScreenState extends State<IrrigationPlanScreen> {
               ),
               onSelectionChanged: (sel) =>
                   setState(() => _editTurns = sel.first),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Umbral de riego propio',
+                  style: TextStyle(fontSize: 12, color: kText2)),
+            ),
+            Switch(
+              value: _editIrrigateBelow != null,
+              activeTrackColor: kBlue,
+              onChanged: (v) => setState(() {
+                if (v) {
+                  _editIrrigateBelow =
+                      s.irrigateBelow ?? crop?.irrigateBelow ?? 35;
+                } else {
+                  _editIrrigateBelow = null;
+                }
+              }),
+            ),
+          ],
+        ),
+        if (_editIrrigateBelow != null)
+          _sliderField(
+            label: 'Umbral',
+            value: _editIrrigateBelow!,
+            min: 10,
+            max: 100,
+            divisions: 90,
+            format: (v) => '${v.round()}%',
+            onChanged: (v) => setState(() => _editIrrigateBelow = v),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Usa el umbral del cultivo'
+              '${crop != null ? ' (${crop.irrigateBelow.toStringAsFixed(0)}%)' : ''}',
+              style: const TextStyle(fontSize: 11, color: kText3),
+            ),
+          ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Notificar "Requiere riego"',
+                  style: TextStyle(fontSize: 12, color: kText2)),
+            ),
+            Switch(
+              value: _editAlerts,
+              activeTrackColor: kBlue,
+              onChanged: (v) => setState(() => _editAlerts = v),
             ),
           ],
         ),
