@@ -1,0 +1,9 @@
+{
+  "name": "medidor-fcm-alerts",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Evaluacion de umbrales de riego y envio automatico de push FCM (GitHub Actions)",
+  "dependencies": {
+    "firebase-admin": "^12.1.0"
+  }
+}

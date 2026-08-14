@@ -1,0 +1,31 @@
+name: FCM Alertas de riego
+
+on:
+  schedule:
+    # Cada 30 minutos (UTC). GitHub Actions solo garantiza intervalos >= 5 min.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  evaluar-y-enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: firebase/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: firebase
+        run: npm ci
+
+      - name: Evaluar umbrales y enviar push
+        working-directory: firebase
+        run: node fcm_alerts.js
+        env:
+          FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}

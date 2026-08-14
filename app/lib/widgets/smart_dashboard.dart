@@ -1845,7 +1845,28 @@ class _SmartDashboardState extends State<SmartDashboard> {
           const SizedBox(height: 4),
           Row(
             children: [
-              Expanded(child: _kv('Panel solar', '—')),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Señal: ',
+                        style: TextStyle(fontSize: 11, color: kText3)),
+                    SignalBars(rssi: d.rssi, size: 12),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        d.rssi == null ? '—' : '${d.rssi} dBm',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _rssiColor(d.rssi),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               Expanded(child: _kv('N° serie', d.deviceId)),
             ],
           ),
@@ -1884,6 +1905,13 @@ class _SmartDashboardState extends State<SmartDashboard> {
   String _lastReportLabel(CloudDevice d) {
     final t = d.lastReportAt;
     return t == null ? '—' : _timeAgo(t);
+  }
+
+  Color _rssiColor(int? rssi) {
+    if (rssi == null) return kText2;
+    if (rssi <= -95) return kRed;
+    if (rssi <= -75) return kOrange;
+    return kGreen;
   }
 
   Widget _kv(String label, String value, {Color? color}) {

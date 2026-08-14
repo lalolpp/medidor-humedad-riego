@@ -1,6 +1,6 @@
 # Estado del proyecto — Medidor de Humedad
 
-Actualizado: 2026-08-06
+Actualizado: 2026-08-13
 
 ## Etapa actual: ✅ Prototipo funcional — app + firmware + nube operativos
 
@@ -83,22 +83,41 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   comunicación (RSSI/sincronización/calidad), mapa esquemático de estaciones con colores y
   panel de alertas recientes. `WeatherService.current()` nuevo. `flutter analyze` 0 issues,
   tests OK, APK 54.6 MB instalado.
+- **RSSI en tarjetas del dashboard**: la fila "Panel solar: —" ahora muestra **"Señal"** con
+  `SignalBars` + valor dBm coloreado por calidad (≤−95 rojo, ≤−75 naranja, sino verde)
+  usando el RSSI del último reporte (`devices/{id}.rssi`). El detalle de sonda y la tabla
+  de sectores ya lo mostraban. `flutter analyze` 0 issues.
+- **Alertas push automáticas por umbral (GitHub Actions, sin Cloud Functions)**: script Node
+  `firebase/fcm_alerts.js` + workflow `.github/workflows/fcm-alerts.yml` (cron cada 30 min +
+  manual). Lee users/campos/sectores/cultivos/dispositivos, calcula la humedad promedio por
+  sector y envía push FCM con `data: {sectorName, humidity, threshold}` (lo que
+  `push_notifications.dart` ya muestra con el canal "Alertas de riego"). Umbral
+  `sector.irrigateBelow ?? crop.irrigateBelow`, respeta `alertsEnabled` y el doc
+  `alerts/fcm_{sectorId}` (solo admin). Sin spam: notifica al bajar y re-avisa cada 24 h si
+  sigue bajo. Pendiente de operación: push al repo y secreto `FCM_SERVICE_ACCOUNT` en GitHub.
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
-> División de trabajo: **Qwen Coder** → RSSI en nube, FCM/notificaciones,
-> revisión de código, testing. **OpenCode** → LTE A7670E, OTA en terreno,
+> División de trabajo: **Qwen Coder** → revisión de código, testing.
+> **OpenCode** → RSSI en nube ✅, FCM/alertas por umbral ✅, LTE A7670E, OTA en terreno,
 > automatización de riego, widgets de pantalla de inicio.
 
-### 1. Enlace de cobertura (RSSI en nube) — *Qwen*
-- [ ] Mostrar la última RSSI (de readings) en las tarjetas del dashboard y detalle de sonda,
-      para diagnóstico de cobertura WiFi/LTE antes de fallas.
+### 1. Enlace de cobertura (RSSI en nube) — ✅ hecho por OpenCode
+- [x] Mostrar la última RSSI (de readings) en las tarjetas del dashboard y detalle de sonda,
+      para diagnóstico de cobertura WiFi/LTE antes de fallas. El RSSI del último reporte llega
+      como `devices/{id}.rssi` (lo actualiza el nodo con cada lectura); ya se ve en tarjetas
+      del dashboard ("Señal" + SignalBars), detalle de sonda y tabla de sectores.
 
-### 2. Notificaciones push (alertas) — *Qwen*
+### 2. Notificaciones push (alertas) — ⚠️ casi listo, falta operación en GitHub
 - [x] Fingerprints SHA-1/SHA-256 registrados en Firebase (FCM ya puede autenticar la app).
-- [ ] Configurar **FCM** en la app (`firebase_messaging`) + token y canal de notificación.
-- [ ] Alertas por umbral (humedad bajo `irrigateBelow` / temp fuera de rango) y por
-      helada (clima minTemp < umbral del cultivo). Hook/cloud function que notifique.
+- [x] Configurar **FCM** en la app (`firebase_messaging`) + token y canal de notificación.
+- [x] Alertas por umbral (humedad bajo `irrigateBelow`): **hook por GitHub Actions**
+      (`firebase/fcm_alerts.js` + `.github/workflows/fcm-alerts.yml`, cada 30 min + manual).
+      Pendiente del usuario: hacer push al repo y crear el secreto
+      **`FCM_SERVICE_ACCOUNT`** (JSON de service account con rol Editor/Cloud Messaging Admin)
+      en Settings → Secrets → Actions; luego Run workflow para probar.
+- [ ] (opcional) Alertas por temp fuera de rango y por helada (minTemp del clima < umbral
+      del cultivo) en el mismo script.
 
 ### 3. Automatización de riego (válvulas/relé) — *OpenCode* — ✅ app + firmware
 - [x] Motor de reglas en la app (`AutomationService` + `AutomationScreen`): umbral, duración,
