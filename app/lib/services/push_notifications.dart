@@ -27,7 +27,6 @@ class PushService {
 
       FirebaseMessaging.onMessage.listen(_show);
       FirebaseMessaging.onMessageOpenedApp.listen(_showOpened);
-      FirebaseMessaging.onBackgroundMessage(fcmBackgroundHandler);
       final initial = await messaging.getInitialMessage();
       if (initial != null) await _showOpened(initial);
 

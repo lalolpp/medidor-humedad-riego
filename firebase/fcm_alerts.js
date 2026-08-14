@@ -97,28 +97,36 @@ async function main() {
         const lowNow = avgHum < threshold;
 
         const state = await sectorState(sector.id);
+        const wasLow = state.low === true;
         const shouldSend =
-          lowNow && (state.low !== true || Date.now() - state.sentAt >= RE_NOTIFY_MS);
+          lowNow && (!wasLow || Date.now() - state.sentAt >= RE_NOTIFY_MS);
 
-        if (lowNow && shouldSend) {
-          const label = s.name || sector.id;
-          try {
-            await admin.messaging().send({
-              token: target.token,
-              data: {
-                sectorName: label,
-                humidity: avgHum.toFixed(1),
-                threshold: threshold.toFixed(0),
-              },
-            });
-            sent++;
-            console.log(`[FCM] Enviado a ${uid} · ${label} (${avgHum.toFixed(1)}% < ${threshold.toFixed(0)}%)`);
-          } catch (e) {
-            console.error(`[FCM] Error enviando a ${uid} · ${label}: ${e.message}`);
+        if (lowNow) {
+          if (shouldSend) {
+            const label = s.name || sector.id;
+            try {
+              await admin.messaging().send({
+                token: target.token,
+                data: {
+                  sectorName: label,
+                  humidity: avgHum.toFixed(1),
+                  threshold: threshold.toFixed(0),
+                },
+              });
+              sent++;
+              console.log(`[FCM] Enviado a ${uid} · ${label} (${avgHum.toFixed(1)}% < ${threshold.toFixed(0)}%)`);
+              // Solo se avanza sentAt cuando el envío tuvo éxito; si falla, la
+              // próxima corrida reintenta (sin esperar las 24 h).
+              await state.ref.set({ low: true, sentAt: Date.now() }, { merge: true });
+            } catch (e) {
+              console.error(`[FCM] Error enviando a ${uid} · ${label}: ${e.message}`);
+              await state.ref.set({ low: true }, { merge: true });
+            }
           }
+          if (!wasLow) pending++;
+        } else {
+          await state.ref.set({ low: false, sentAt: 0 }, { merge: true });
         }
-        if (lowNow && !state.low) pending++;
-        await state.ref.set({ low: lowNow, sentAt: lowNow ? Date.now() : 0 }, { merge: true });
       }
     }
   }
