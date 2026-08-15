@@ -1,6 +1,6 @@
 # Estado del proyecto — Medidor de Humedad
 
-Actualizado: 2026-08-13
+Actualizado: 2026-08-15
 
 ## Etapa actual: ✅ Prototipo funcional — app + firmware + nube operativos
 
@@ -39,6 +39,11 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   `FIRMWARE_VERSION` y descarga el `.bin`. Requiere grabar UNA vez por USB el esquema OTA.
 - BLE GATT (humedad en vivo, batería, intervalo, autonomía, historial por chunks).
 - Ajustes en NVS, historial con recorte a 30 archivos.
+- **Backfill de lecturas pendientes (OpenCode, v1.2.0)**: si no hay red, el nodo acumula
+  lecturas en LittleFS; al reconectar `cloudBackfill()` las reenvía en lotes (commit Firestore,
+  ≤100 por lote, tope 10 s por ciclo) con doc idempotente `readings/r{ts}` (marca de avance
+  `lastSyncedTs` en NVS). Compila en ambos entornos: `esp32dev` y `esp32dev_ota`
+  (RAM 19.0% / flash 91.4% — flash quedando justo).
 
 ### App Flutter (`app/`)
 - Login/registro Firebase Auth; `rol` user/admin; unidad C/F (`AppSettings`).
@@ -94,7 +99,10 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   `push_notifications.dart` ya muestra con el canal "Alertas de riego"). Umbral
   `sector.irrigateBelow ?? crop.irrigateBelow`, respeta `alertsEnabled` y el doc
   `alerts/fcm_{sectorId}` (solo admin). Sin spam: notifica al bajar y re-avisa cada 24 h si
-  sigue bajo. Pendiente de operación: push al repo y secreto `FCM_SERVICE_ACCOUNT` en GitHub.
+  sigue bajo. Fix OpenCode (2026-08-15): handler de background registrado en `main()` antes de
+  `runApp` (los push se perdían con la app cerrada) y reintento de envíos fallidos (solo avanza
+  `sentAt` cuando el envío tiene éxito). Pendiente de operación: secreto `FCM_SERVICE_ACCOUNT`
+  en GitHub.
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
@@ -108,14 +116,15 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
       como `devices/{id}.rssi` (lo actualiza el nodo con cada lectura); ya se ve en tarjetas
       del dashboard ("Señal" + SignalBars), detalle de sonda y tabla de sectores.
 
-### 2. Notificaciones push (alertas) — ⚠️ casi listo, falta operación en GitHub
+### 2. Notificaciones push (alertas) — ⚠️ solo falta el secreto en GitHub
 - [x] Fingerprints SHA-1/SHA-256 registrados en Firebase (FCM ya puede autenticar la app).
 - [x] Configurar **FCM** en la app (`firebase_messaging`) + token y canal de notificación.
 - [x] Alertas por umbral (humedad bajo `irrigateBelow`): **hook por GitHub Actions**
       (`firebase/fcm_alerts.js` + `.github/workflows/fcm-alerts.yml`, cada 30 min + manual).
-      Pendiente del usuario: hacer push al repo y crear el secreto
-      **`FCM_SERVICE_ACCOUNT`** (JSON de service account con rol Editor/Cloud Messaging Admin)
-      en Settings → Secrets → Actions; luego Run workflow para probar.
+      Handler de background en `main()` + reintento de envíos fallidos (ya subido).
+      Pendiente del usuario: crear el secreto **`FCM_SERVICE_ACCOUNT`** (JSON de service
+      account con rol Editor/Cloud Messaging Admin) en Settings → Secrets → Actions;
+      luego Run workflow para probar.
 - [ ] (opcional) Alertas por temp fuera de rango y por helada (minTemp del clima < umbral
       del cultivo) en el mismo script.
 
