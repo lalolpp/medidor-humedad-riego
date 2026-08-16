@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _inviteCode = TextEditingController();
   bool _signUp = false;
   bool _loading = false;
   String? _error;
@@ -25,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _inviteCode.dispose();
     super.dispose();
   }
 
@@ -49,6 +51,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final inviteCode = _inviteCode.text.trim();
+    if (inviteCode.isNotEmpty) {
+      try {
+        final ok =
+            await CloudService.instance.validateInvite(inviteCode);
+        if (ok == null) {
+          setState(() => _error = 'El código de invitación no es válido.');
+          return;
+        }
+      } catch (_) {
+        setState(() => _error =
+            'No se pudo validar el código. Revisa tu conexión.');
+        return;
+      }
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -62,6 +79,22 @@ class _LoginScreenState extends State<LoginScreen> {
         try {
           await CloudService.instance.setRole(cred.user!.uid, 'user');
         } catch (_) {}
+        if (inviteCode.isNotEmpty) {
+          try {
+            await CloudService.instance.requestAccess(
+              token: inviteCode,
+              email: _email.text.trim(),
+              uid: cred.user!.uid,
+            );
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text('No se pudo registrar la solicitud: $e')),
+              );
+            }
+          }
+        }
       } else {
         await AuthService.instance.signInEmail(_email.text.trim(), _password.text);
       }
@@ -163,6 +196,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                       onFieldSubmitted: (_) => _submit(),
                     ),
+                    if (_signUp) ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _inviteCode,
+                        autocorrect: false,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(
+                          labelText: 'Código de invitación (opcional)',
+                          hintText: 'Ej: AB3DFK9P',
+                          prefixIcon: Icon(Icons.qr_code_2_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(

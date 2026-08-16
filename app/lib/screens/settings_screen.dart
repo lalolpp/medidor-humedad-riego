@@ -4,6 +4,8 @@ import 'package:medidor_humedad/models/field.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/widgets/smart_dashboard.dart';
 
+import 'access_share_screen.dart';
+
 class SettingsScreen extends StatefulWidget {
   final String uid;
   const SettingsScreen({super.key, required this.uid});
@@ -132,6 +134,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                   children: [
+                    _sectionTitle('Compartir acceso',
+                        Icons.people_outline),
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'Invita a otra persona para que vea tu campo en tiempo '
+                        'real (solo lectura). Genera un código QR y aprueba o '
+                        'bloquea los accesos.',
+                        style: TextStyle(color: kText2, fontSize: 12),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                AccessShareScreen(uid: widget.uid),
+                          ),
+                        );
+                      },
+                      style: FilledButton.styleFrom(backgroundColor: kGreen),
+                      icon: const Icon(Icons.qr_code_2),
+                      label: const Text('Compartir acceso'),
+                    ),
+                    const SizedBox(height: 24),
                     _sectionTitle('Cultivos y umbrales de riego',
                         Icons.eco_outlined),
                     if (_crops.isEmpty)

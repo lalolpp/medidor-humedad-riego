@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -22,13 +23,40 @@ service cloud.firestore {
       return deviceData.sharedWith != null &&
         request.auth.token.email in deviceData.sharedWith;
     }
+    // ¿Un campo está compartido con el email del usuario actual (invitado)?
+    function fieldSharedWith(fieldData) {
+      return fieldData != null && fieldData.sharedWith != null &&
+        request.auth.token.email in fieldData.sharedWith;
+    }
+    function canReadField(fieldData) {
+      return fieldData != null && (
+        fieldData.owner == request.auth.uid || isAdmin() || fieldSharedWith(fieldData)
+      );
+    }
+    function canReadFieldById(fieldId) {
+      return canReadField(get(/databases/$(database)/documents/fields/$(fieldId)).data);
+    }
+    // Lee un dispositivo si es dueño, admin, compartido por email, o pertenece a
+    // un campo compartido con el email del usuario (invitado aprobado).
+    function canReadDeviceData(deviceData) {
+      return deviceData.owner == request.auth.uid
+        || isAdmin()
+        || isSharedWith(deviceData)
+        || shareRole(deviceData) != null
+        || (deviceData.fieldId != null && fieldSharedWith(
+          get(/databases/$(database)/documents/fields/$(deviceData.fieldId)).data));
+    }
     function canReadDevice(deviceId) {
-      let d = get(/databases/$(database)/documents/devices/$(deviceId)).data;
-      return d.owner == request.auth.uid || isAdmin() || shareRole(d) != null;
+      return canReadDeviceData(get(/databases/$(database)/documents/devices/$(deviceId)).data);
     }
     function canManageDevice(deviceId) {
       let d = get(/databases/$(database)/documents/devices/$(deviceId)).data;
       return d.owner == request.auth.uid || isAdmin() || shareRole(d) == 'manager';
+    }
+    // Invitaciones: el dueño del campo (o admin) gestiona; cualquiera autenticado
+    // puede LEER un token para validarlo al registrarse.
+    function canManageInvite(ownerUid) {
+      return ownerUid == request.auth.uid || isAdmin();
     }
 
     match /users/{userId} {
@@ -47,9 +75,7 @@ service cloud.firestore {
       // Claim: cualquier usuario autenticado puede crear un dispositivo sin dueño;
       // dueño, admin o compartido (viewer/manager) lee; manager escribe.
       // El nodo (cualquier usuario autenticado) puede actualizar SOLO telemetría.
-      allow read: if isSignedIn() && (
-        resource.data.owner == request.auth.uid || isAdmin() ||
-        isSharedWith(resource.data) || shareRole(resource.data) != null);
+      allow read: if isSignedIn() && canReadDeviceData(resource.data);
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (
         resource.data.owner == request.auth.uid || isAdmin() ||
@@ -79,15 +105,15 @@ service cloud.firestore {
 
     match /fields/{fieldId} {
       // Campos/parcelas: nombre + coordenadas para clima y agrupación de sondas.
-      allow read: if isSignedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      // Lee el dueño, admin o quien esté en `sharedWith` (invitado aprobado).
+      allow read: if isSignedIn() && canReadField(resource.data);
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn() &&
         (resource.data.owner == request.auth.uid || isAdmin());
 
       match /sectors/{sectorId} {
         // Sectores de riego del campo (diseño: variedad, área, emisores).
-        allow read: if isSignedIn() &&
-          (get(/databases/$(database)/documents/fields/$(fieldId)).data.owner == request.auth.uid || isAdmin());
+        allow read: if isSignedIn() && canReadFieldById(fieldId);
         allow create: if isSignedIn();
         allow update, delete: if isSignedIn() &&
           (get(/databases/$(database)/documents/fields/$(fieldId)).data.owner == request.auth.uid || isAdmin());
@@ -106,6 +132,32 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isAdmin();
       allow update, delete: if isAdmin();
+    }
+
+    // Invitaciones para compartir la app: {ownerUid, fieldId, createdAt, email?}.
+    // El token (id del documento) viaja en el QR/enlace.
+    match /invites/{token} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+        canManageInvite(resource.data.ownerUid);
+    }
+
+    // Solicitudes de acceso de los invitados. El dueño del campo (o admin) ve y
+    // aprueba/rechaza; el solicitante solo crea su propia solicitud 'pending' y
+    // puede leer su propio estado para saber si fue aprobado o revocado.
+    match /access_requests/{requestId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow read: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid ||
+        resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid || isAdmin());
     }
   }
 }

@@ -9,6 +9,7 @@ import 'package:medidor_humedad/models/reading.dart';
 import 'package:medidor_humedad/models/sector.dart';
 import 'package:medidor_humedad/screens/cloud_device_detail_screen.dart';
 import 'package:medidor_humedad/screens/irrigation_plan_screen.dart';
+import 'package:medidor_humedad/screens/access_share_screen.dart';
 import 'package:medidor_humedad/screens/sector_detail_screen.dart';
 import 'package:medidor_humedad/screens/settings_screen.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
@@ -91,8 +92,10 @@ class _SectorStat {
   final int rangeIdx;
   final String statusText;
   final Color statusColor;
+  final String? fieldName;
   const _SectorStat(this.sector, this.devices, this.avgHum, this.maxTemp,
-      this.crop, this.rangeIdx, this.statusText, this.statusColor);
+      this.crop, this.rangeIdx, this.statusText, this.statusColor,
+      [this.fieldName]);
 }
 
 class _SmartDashboardState extends State<SmartDashboard> {
@@ -101,6 +104,9 @@ class _SmartDashboardState extends State<SmartDashboard> {
   int _historyDays = 7;
   bool _seeding = false;
   bool _refreshing = false;
+  bool _addingSector = false;
+  /// Estado de la solicitud del usuario invitado (pending/revoked) si aplica.
+  String? _inviteeStatus;
   late DateTime _now;
   Timer? _clock;
 
@@ -128,6 +134,17 @@ class _SmartDashboardState extends State<SmartDashboard> {
         _historyFuture = _loadHistory(r, _historyDays);
       });
     });
+    _loadInviteeStatus();
+  }
+
+  /// Si este usuario no es dueño de nada, mira si pidió acceso (invitado) y
+  /// muestra el estado correspondiente en vez de la pantalla de "cargar diseño".
+  Future<void> _loadInviteeStatus() async {
+    try {
+      final status = await CloudService.instance.myRequestStatus(widget.uid);
+      if (!mounted) return;
+      setState(() => _inviteeStatus = status);
+    } catch (_) {}
   }
 
   @override
@@ -154,10 +171,11 @@ class _SmartDashboardState extends State<SmartDashboard> {
   }
 
   Future<_LoadResult> _loadFromCloud() async {
-    final fields = await CloudService.instance.myFields(widget.uid);
+    final ownFields = await CloudService.instance.myFields(widget.uid);
     final crops = await CloudService.instance.myCrops(widget.uid);
     var devices = await CloudService.instance.myDevices(widget.uid);
     final email = AuthService.instance.currentUser?.email;
+    var fields = ownFields;
     if (email != null) {
       final shared =
           await CloudService.instance.devicesSharedWithEmail(email);
@@ -165,6 +183,14 @@ class _SmartDashboardState extends State<SmartDashboard> {
       devices = [
         ...devices,
         ...shared.where((d) => !ids.contains(d.deviceId)),
+      ];
+      // Campos compartidos con el correo del invitado aprobado.
+      final sharedFields =
+          await CloudService.instance.fieldsSharedWithEmail(email);
+      final ownIds = ownFields.map((f) => f.id).toSet();
+      fields = [
+        ...ownFields,
+        ...sharedFields.where((f) => !ownIds.contains(f.id)),
       ];
     }
     final cropById = {for (final c in crops) c.id: c};
@@ -495,6 +521,27 @@ class _SmartDashboardState extends State<SmartDashboard> {
   }
 
   Widget _emptyState() {
+    final status = _inviteeStatus;
+    if (status == 'pending') {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Tu solicitud de acceso está pendiente de aprobación por el '
+          'dueño del campo. Cuando sea aprobada podrás ver los datos aquí.',
+          style: TextStyle(color: kText2),
+        ),
+      );
+    }
+    if (status == 'revoked' || status == 'rejected') {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Tu acceso fue revocado por el administrador. Contacta al dueño '
+          'del campo si necesitas volver a acceder.',
+          style: TextStyle(color: kOrange),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -536,7 +583,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
         _sectionLabel('Panel general', Icons.dashboard_outlined, _secDashboard),
         _kpiRow(stats),
         _bottomStats(stats),
-        _rangeRow(stats),
+        _rangeRow(stats, onAdd: _addingSector ? null : () => _addEmptySector(result)),
         _sectionLabel('Resumen por sector', Icons.grid_view_outlined, _secSectores),
         _sectorTable(result, stats),
         _sectionLabel('Historial de humedad', Icons.show_chart, _secHistorial),
@@ -663,6 +710,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                 const SizedBox(width: 8),
                 _filterButton(),
                 const SizedBox(width: 8),
+                _shareButton(),
+                const SizedBox(width: 8),
                 _settingsButton(),
                 const SizedBox(width: 8),
                 _refreshButton(),
@@ -686,6 +735,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
                   _clockChip(dateStr, timeStr),
                   const SizedBox(width: 8),
                   _filterButton(),
+                  const SizedBox(width: 8),
+                  _shareButton(),
                   const SizedBox(width: 8),
                   _settingsButton(),
                   const SizedBox(width: 8),
@@ -808,6 +859,25 @@ class _SmartDashboardState extends State<SmartDashboard> {
       ),
       icon: const Icon(Icons.tune),
       tooltip: 'Configuración',
+    );
+  }
+
+  Widget _shareButton() {
+    return IconButton.filled(
+      onPressed: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AccessShareScreen(uid: widget.uid),
+          ),
+        );
+      },
+      style: IconButton.styleFrom(
+        backgroundColor: kCard,
+        foregroundColor: kText2,
+        side: const BorderSide(color: kBorder),
+      ),
+      icon: const Icon(Icons.qr_code_2),
+      tooltip: 'Compartir acceso',
     );
   }
 
@@ -955,7 +1025,8 @@ class _SmartDashboardState extends State<SmartDashboard> {
         }
         sectorStats.add(_SectorStat(
             s, devices, avgS, maxT, crop,
-            avgS == null ? -1 : HumRanges.indexOf(avgS), st, sc));
+            avgS == null ? -1 : HumRanges.indexOf(avgS), st, sc,
+            b.field.name));
       }
     }
 
@@ -1310,7 +1381,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
 
   // ---- Rangos ---------------------------------------------------------------
 
-  Widget _rangeRow(_Stats s) {
+  Widget _rangeRow(_Stats s, {VoidCallback? onAdd}) {
     final counts = List.filled(5, 0);
     for (final st in s.sectorStats) {
       if (st.rangeIdx >= 0) counts[st.rangeIdx]++;
@@ -1367,11 +1438,30 @@ class _SmartDashboardState extends State<SmartDashboard> {
           const SizedBox(height: 10),
           _dashCard(
             title: 'Distribución de sectores',
-            child: RangeDonut(counts: counts),
+            child: SectorCarousel(slides: _sectorSlides(s), onAdd: onAdd),
           ),
         ],
       ),
     );
+  }
+
+  List<SectorSlide> _sectorSlides(_Stats s) {
+    return [
+      for (final st in s.sectorStats)
+        SectorSlide(
+          name: st.sector.name,
+          variety: st.sector.variety,
+          fieldName: st.fieldName,
+          cropName: st.crop?.name,
+          humidity: st.avgHum,
+          tempLabel: st.maxTemp == null
+              ? null
+              : '${AppSettings.toDisplay(st.maxTemp!).toStringAsFixed(1)}${AppSettings.unitSuffix()}',
+          rangeIdx: st.rangeIdx,
+          statusText: st.statusText,
+          statusColor: st.statusColor,
+        ),
+    ];
   }
 
   // ---- Tabla de sectores ----------------------------------------------------
@@ -1385,10 +1475,91 @@ class _SmartDashboardState extends State<SmartDashboard> {
           children: [
             for (final st in s.sectorStats)
               _sectorRow(st),
+            if (s.sectorStats.isNotEmpty) const SizedBox(height: 2),
+            Row(
+              children: [
+                if (s.sectorStats.length < 8) ...[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _seeding ? null : _seed,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kGreen,
+                        side: const BorderSide(color: kBorder),
+                      ),
+                      icon: _seeding
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.agriculture_outlined, size: 16),
+                      label: const Text(
+                        'Completar diseño (8 sectores)',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        _addingSector ? null : () => _addEmptySector(r),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kBlue,
+                      side: const BorderSide(color: kBorder),
+                    ),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text(
+                      'Añadir sector',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Crea un sector vacío (número siguiente) para ir incorporando más
+  /// sectores en el futuro.
+  Future<void> _addEmptySector(_LoadResult r) async {
+    if (r.fields.isEmpty) return;
+    final field = r.fields.first;
+    setState(() => _addingSector = true);
+    try {
+      final sectors = await CloudService.instance.sectorsFor(field.id);
+      var maxNum = 0;
+      for (final s in sectors) {
+        if (s.number > maxNum) maxNum = s.number;
+      }
+      final next = maxNum + 1;
+      await CloudService.instance.createSector(
+        field.id,
+        Sector(
+          id: '',
+          fieldId: field.id,
+          number: next,
+          name: 'Sector $next',
+          variety: '',
+          areaHa: 0,
+          emitterType: '',
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _future = _load());
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo añadir el sector: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _addingSector = false);
+    }
   }
 
   Widget _sectorRow(_SectorStat st) {

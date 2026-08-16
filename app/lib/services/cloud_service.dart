@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart' hide Field;
+import 'package:medidor_humedad/models/access_request.dart';
 import 'package:medidor_humedad/models/automation_config.dart';
 import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/crop.dart';
@@ -118,6 +119,197 @@ class CloudService {
       'shares.$normalized': FieldValue.delete(),
       'sharedWith': FieldValue.arrayRemove([normalized]),
     });
+  }
+
+  // ---- Invitaciones y accesos compartidos (invitados) ----
+
+  /// Genera una invitación (token) para que otra persona pueda acceder a la
+  /// app y ver el campo del dueño. El token viaja en el QR/enlace.
+  Future<String> createInvite(String uid, String fieldId) async {
+    final token = _randomToken();
+    await FirebaseFirestore.instance.collection('invites').doc(token).set({
+      'ownerUid': uid,
+      'fieldId': fieldId,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    return token;
+  }
+
+  /// Valida un token de invitación; devuelve el fieldId o null si no existe.
+  Future<String?> validateInvite(String token) async {
+    final doc =
+        await FirebaseFirestore.instance.collection('invites').doc(token).get();
+    if (!doc.exists) return null;
+    return doc.data()?['fieldId'] as String?;
+  }
+
+  /// Solicitudes de acceso a mis campos (pendientes e historial).
+  Future<List<AccessRequest>> myAccessRequests(String uid) async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('access_requests')
+        .where('ownerUid', isEqualTo: uid)
+        .get();
+    final list = snapshot.docs
+        .map((doc) => AccessRequest.fromMap(doc.id, doc.data()))
+        .toList()
+      ..sort((a, b) {
+        final ta = a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final tb = b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return tb.compareTo(ta);
+      });
+    return list;
+  }
+
+  /// Stream en tiempo real de las solicitudes de acceso (para el aviso en la
+  /// app cuando alguien pide acceso).
+  Stream<List<AccessRequest>> streamAccessRequests(String uid) {
+    return FirebaseFirestore.instance
+        .collection('access_requests')
+        .where('ownerUid', isEqualTo: uid)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((doc) => AccessRequest.fromMap(doc.id, doc.data()))
+            .toList());
+  }
+
+  /// El invitado crea su solicitud de acceso con el token de la invitación.
+  /// Reutiliza una solicitud pendiente del mismo correo si ya existe.
+  Future<String?> requestAccess({
+    required String token,
+    required String email,
+    required String uid,
+  }) async {
+    final normalized = email.trim().toLowerCase();
+    final invite =
+        await FirebaseFirestore.instance.collection('invites').doc(token).get();
+    if (!invite.exists) return null;
+    final data = invite.data()!;
+    final fieldId = data['fieldId'] as String?;
+    final ownerUid = data['ownerUid'] as String?;
+    if (fieldId == null || ownerUid == null) return null;
+
+    final pending = await FirebaseFirestore.instance
+        .collection('access_requests')
+        .where('ownerUid', isEqualTo: ownerUid)
+        .get();
+    for (final doc in pending.docs) {
+      final m = doc.data();
+      if (m['email'] == normalized && m['status'] == 'pending') {
+        await doc.reference.update({'uid': uid});
+        return doc.id;
+      }
+    }
+    final ref = await FirebaseFirestore.instance
+        .collection('access_requests')
+        .add({
+      'ownerUid': ownerUid,
+      'fieldId': fieldId,
+      'token': token,
+      'email': normalized,
+      'uid': uid,
+      'status': 'pending',
+      'requestedAt': DateTime.now().toIso8601String(),
+    });
+    return ref.id;
+  }
+
+  /// Aprueba una solicitud: comparte el campo y sus dispositivos con el email.
+  Future<void> approveAccess(AccessRequest req) async {
+    await FirebaseFirestore.instance.collection('fields').doc(req.fieldId).update({
+      'sharedWith': FieldValue.arrayUnion([req.email]),
+    });
+    final devices = await _devicesOfOwner(req.ownerUid);
+    for (final d in devices) {
+      try {
+        await shareDevice(d.deviceId, req.email, role: 'viewer');
+      } catch (_) {}
+    }
+    await FirebaseFirestore.instance
+        .collection('access_requests')
+        .doc(req.id)
+        .update({
+      'status': 'approved',
+      'decidedAt': DateTime.now().toIso8601String(),
+    });
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(req.uid)
+        .update({'status': 'active'});
+  }
+
+  Future<void> rejectAccess(AccessRequest req) async {
+    await FirebaseFirestore.instance
+        .collection('access_requests')
+        .doc(req.id)
+        .update({
+      'status': 'rejected',
+      'decidedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Bloquea/revoca el acceso: quita el email del campo y de los dispositivos.
+  Future<void> revokeAccess(AccessRequest req) async {
+    await FirebaseFirestore.instance
+        .collection('fields')
+        .doc(req.fieldId)
+        .update({'sharedWith': FieldValue.arrayRemove([req.email])});
+    final devices = await _devicesOfOwner(req.ownerUid);
+    for (final d in devices) {
+      try {
+        await unshareDevice(d.deviceId, req.email);
+      } catch (_) {}
+    }
+    await FirebaseFirestore.instance
+        .collection('access_requests')
+        .doc(req.id)
+        .update({
+      'status': 'revoked',
+      'decidedAt': DateTime.now().toIso8601String(),
+    });
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(req.uid)
+        .update({'status': 'blocked'});
+  }
+
+  /// Campos compartidos con mi correo (visto por el invitado aprobado).
+  Future<List<Field>> fieldsSharedWithEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    final snapshot = await FirebaseFirestore.instance
+        .collection('fields')
+        .where('sharedWith', arrayContains: normalized)
+        .get();
+    return snapshot.docs.map((doc) => Field.fromMap(doc.id, doc.data())).toList();
+  }
+
+  /// Estado de la solicitud del invitado (uid): 'pending' | 'approved' |
+  /// 'rejected' | 'revoked', o null si nunca solicitó acceso.
+  Future<String?> myRequestStatus(String uid) async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('access_requests')
+        .where('uid', isEqualTo: uid)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    final docs = snapshot.docs.map((d) => d.data()).toList()
+      ..sort((a, b) =>
+          (a['requestedAt'] ?? '').toString().compareTo((b['requestedAt'] ?? '').toString()));
+    return docs.last['status'] as String?;
+  }
+
+  Future<List<CloudDevice>> _devicesOfOwner(String uid) async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('devices')
+        .where('owner', isEqualTo: uid)
+        .get();
+    return snapshot.docs
+        .map((doc) => CloudDevice.fromMap(doc.id, doc.data()))
+        .toList();
+  }
+
+  String _randomToken() {
+    final rand = math.Random.secure();
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return List.generate(8, (_) => chars[rand.nextInt(chars.length)]).join();
   }
 
   /// Configuración OTA: el nodo descargará el firmware .bin cuando su
@@ -530,6 +722,11 @@ class CloudService {
         fieldId = f.id;
         break;
       }
+    }
+    // Si el usuario ya tiene un único campo, completar el diseño en él en
+    // lugar de crear un campo "Nicolini" adicional.
+    if (fieldId.isEmpty && existingFields.length == 1) {
+      fieldId = existingFields.first.id;
     }
     if (fieldId.isEmpty) {
       fieldId = await createField(uid, 'Nicolini',
