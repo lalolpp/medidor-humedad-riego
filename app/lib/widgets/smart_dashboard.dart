@@ -1460,6 +1460,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
           rangeIdx: st.rangeIdx,
           statusText: st.statusText,
           statusColor: st.statusColor,
+          onDelete: () => _deleteSector(st.sector),
         ),
     ];
   }
@@ -1559,6 +1560,43 @@ class _SmartDashboardState extends State<SmartDashboard> {
       }
     } finally {
       if (mounted) setState(() => _addingSector = false);
+    }
+  }
+
+  /// Elimina un sector de la distribución, con confirmación previa.
+  Future<void> _deleteSector(Sector s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCard,
+        title: const Text('Eliminar sector',
+            style: TextStyle(color: kText)),
+        content: Text(
+          '¿Eliminar "${s.name}"? Se quitará de la distribución de sectores.',
+          style: const TextStyle(color: kText2),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar', style: TextStyle(color: kText2)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar', style: TextStyle(color: kRed)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await CloudService.instance.deleteSector(s.fieldId, s.id);
+      if (!mounted) return;
+      setState(() => _future = _load());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar el sector: $e')),
+      );
     }
   }
 

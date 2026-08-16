@@ -172,6 +172,7 @@ class SectorSlide {
   final int rangeIdx;
   final String statusText;
   final Color statusColor;
+  final VoidCallback? onDelete;
 
   const SectorSlide({
     required this.name,
@@ -183,6 +184,7 @@ class SectorSlide {
     required this.rangeIdx,
     required this.statusText,
     required this.statusColor,
+    this.onDelete,
   });
 }
 
@@ -362,72 +364,101 @@ class _SectorCarouselState extends State<SectorCarousel> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: s.statusColor.withValues(alpha: 0.45)),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          _gauge(s),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (s.fieldName != null && s.fieldName!.isNotEmpty) ...[
-                  Text(
-                    s.fieldName!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF38BDF8),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                ],
-                Text(
-                  s.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFE6EDF7),
-                  ),
-                ),
-                if (subtitle.isNotEmpty)
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 11, color: Color(0xFF94A3B8)),
-                  ),
-                const SizedBox(height: 5),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: s.statusColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      s.statusText,
+          Row(
+            children: [
+              _gauge(s),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (s.fieldName != null && s.fieldName!.isNotEmpty) ...[
+                      Text(
+                        s.fieldName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF38BDF8),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
+                    Text(
+                      s.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
+                      style: const TextStyle(
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: s.statusColor,
+                        color: Color(0xFFE6EDF7),
                       ),
                     ),
-                  ),
+                    if (subtitle.isNotEmpty)
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF94A3B8)),
+                      ),
+                    const SizedBox(height: 5),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: s.statusColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          s.statusText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: s.statusColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          if (s.onDelete != null)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: _deleteButton(s),
+            ),
         ],
+      ),
+    );
+  }
+
+  Widget _deleteButton(SectorSlide s) {
+    return Material(
+      color: const Color(0xFF7F1D1D),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: s.onDelete,
+        borderRadius: BorderRadius.circular(8),
+        child: const Padding(
+          padding: EdgeInsets.all(4),
+          child: Icon(
+            Icons.delete_outline,
+            size: 16,
+            color: Color(0xFFFCA5A5),
+          ),
+        ),
       ),
     );
   }

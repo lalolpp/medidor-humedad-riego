@@ -103,4 +103,40 @@ void main() {
     expect(tapped, 1);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('SectorCarousel muestra botón de eliminar y dispara callback',
+      (WidgetTester tester) async {
+    var deleted = 0;
+    final delSlides = [
+      SectorSlide(
+        name: 'Sector 1',
+        variety: 'Manzano',
+        rangeIdx: 0,
+        statusText: 'OK',
+        statusColor: const Color(0xFF22C55E),
+        onDelete: () => deleted++,
+      ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: SectorCarousel(slides: delSlides),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+
+    expect(deleted, 1);
+    expect(tester.takeException(), isNull);
+  });
 }
