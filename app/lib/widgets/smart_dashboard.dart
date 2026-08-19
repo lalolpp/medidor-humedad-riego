@@ -702,7 +702,7 @@ class _SmartDashboardState extends State<SmartDashboard> {
               children: [
                 brand,
                 const Spacer(),
-                welcome,
+                Flexible(child: welcome),
                 const SizedBox(width: 16),
                 _clockChip(dateStr, timeStr),
                 const SizedBox(width: 8),
