@@ -15,6 +15,7 @@
 #endif
 
 static unsigned long bleWindowEnd = 0;
+static unsigned long valveOpenedAt = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -30,9 +31,18 @@ void setup() {
     if (cloudLogin()) {
       // Aplica el comando de riego antes de publicar: si la app ordenó abrir
       // la válvula, este ciclo lo deja accionado (y el loop lo mantiene).
+      // Safety: no abre válvula si la batería está por debajo del mínimo.
       String valveState;
       if (cloudFetchValve(valveState)) {
-        valveSet(valveState == "ON");
+        if (valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY) {
+          Serial.printf("[VALVE] Batería baja (%.0f%%), ignorando comando ON\n",
+                        r.batteryLevel01 * 100);
+        } else {
+          valveSet(valveState == "ON");
+          if (valveActive()) {
+            valveOpenedAt = millis();
+          }
+        }
       }
       // Ajusta el intervalo de reporte según la configuración remota
       // (configurado desde la app) antes de publicar.
@@ -74,10 +84,21 @@ void loop() {
   // Mientras la válvula esté abierta el relé debe permanecer alimentado: no se
   // duerme y se re-chequea el comando remoto para detectar el "OFF".
   if (valveActive() && millis() >= bleWindowEnd) {
-    bleWindowEnd = millis() + VALVE_RECHECK_MS;
-    String valveState;
-    if (cloudFetchValve(valveState) && valveState != "ON") {
+    // Safety: si la válvula lleva abierta más de VALVE_MAX_OPEN_MIN, cerrar.
+#if VALVE_MAX_OPEN_MIN > 0
+    if (valveOpenedAt > 0 &&
+        (millis() - valveOpenedAt) > (unsigned long)VALVE_MAX_OPEN_MIN * 60000UL) {
+      Serial.printf("[VALVE] Safety: máximo %d min alcanzado, cerrando\n",
+                    VALVE_MAX_OPEN_MIN);
       valveSet(false);
+    } else
+#endif
+    {
+      bleWindowEnd = millis() + VALVE_RECHECK_MS;
+      String valveState;
+      if (cloudFetchValve(valveState) && valveState != "ON") {
+        valveSet(false);
+      }
     }
   }
 #endif

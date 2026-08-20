@@ -16,7 +16,7 @@
 #define DEFAULT_DEVICE_ID "dev0001"
 
 // Versión del firmware, comparada con otaVersion remota para decidir OTA.
-#define FIRMWARE_VERSION "1.2.0"
+#define FIRMWARE_VERSION "1.3.0"
 
 #define SLEEP_CURRENT_MAH_PER_DAY 0.7f
 #define ACTIVE_MAH_PER_CYCLE 2.1f
@@ -49,3 +49,11 @@
 #define VALVE_KEEP_AWAKE 1
 // Mientras riega, re-chequea la nube cada este intervalo para detectar "OFF".
 #define VALVE_RECHECK_MS 60000
+// Tiempo máximo que la válvula puede estar abierta (minutos). Si se excede,
+// el nodo cierra la válvula automáticamente como protección contra inundación.
+// 0 = sin límite (no recomendado en producción).
+#define VALVE_MAX_OPEN_MIN 240
+// Nivel mínimo de batería (0.0–1.0) para accionar la válvula. Si la batería
+// está por debajo de este umbral, el nodo ignora el comando ON y duerme para
+// proteger la alimentación.
+#define VALVE_MIN_BATTERY 0.10

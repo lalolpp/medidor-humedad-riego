@@ -82,7 +82,7 @@ service cloud.firestore {
         shareRole(resource.data) == 'manager' ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'humidity', 'soilTemp', 'batteryLevel', 'rssi', 'intervalMin',
-          'autonomyDays', 'lastReportAt'
+          'autonomyDays', 'lastReportAt', 'depthCm'
         ])
       );
       allow delete: if isAdmin();
@@ -158,6 +158,31 @@ service cloud.firestore {
         resource.data.ownerUid == request.auth.uid || isAdmin());
       allow delete: if isSignedIn() && (
         resource.data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /commands/{commandId} {
+      allow read: if isSignedIn() && canReadDevice(resource.data.deviceId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.owner == request.auth.uid || isAdmin() ||
+        canManageDevice(resource.data.deviceId));
+      allow delete: if isAdmin();
+    }
+
+    match /irrigationEvents/{eventId} {
+      allow read: if isSignedIn() && canReadDevice(resource.data.deviceId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.owner == request.auth.uid || isAdmin() ||
+        canManageDevice(resource.data.deviceId));
+      allow delete: if isAdmin();
+    }
+
+    match /sectorClimate/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
     }
   }
 }

@@ -485,6 +485,25 @@ class CloudService {
       final batteryLevel = ((batteryV - 3.3) / 0.9).clamp(0.0, 1.0);
       final rssi = (-68 + (random.nextInt(17) - 8)).clamp(-90, -40);
 
+      // Perfil de humedad multi-depth (10 sensores cada 10 cm).
+      // La superficie (10 cm) fluctúa más; la profundidad (100 cm) es más estable.
+      final profile = <String, double>{};
+      for (var depth = 10; depth <= 100; depth += 10) {
+        final depthFactor = depth / 100.0; // 0.1 → 1.0
+        final surfaceSensitivity = 1.0 - depthFactor * 0.6;
+        final noise = (random.nextDouble() - 0.5) * 3.0;
+        final profileHumidity = (humidity * surfaceSensitivity +
+                irrigation * surfaceSensitivity * 0.8 +
+                20.0 * depthFactor + // la profundidad retiene más agua
+                noise)
+            .clamp(5.0, 95.0);
+        profile['$depth'] = double.parse(profileHumidity.toStringAsFixed(1));
+      }
+
+      // Temperaturas PT1000: 30 cm y 70 cm (la profunda es más estable).
+      final temp30 = (soilTemp + 0.5 + random.nextDouble() * 0.5 - 0.25);
+      final temp70 = (soilTemp - 1.5 + random.nextDouble() * 0.3 - 0.15);
+
       latest = {
         'ts': t.millisecondsSinceEpoch ~/ 1000,
         'humidity': double.parse(humidity.toStringAsFixed(1)),
@@ -493,6 +512,9 @@ class CloudService {
         'batteryLevel': double.parse(batteryLevel.toStringAsFixed(3)),
         'rssi': rssi,
         'intervalMin': 30,
+        'humidityByDepth': profile,
+        'temperature30C': double.parse(temp30.toStringAsFixed(1)),
+        'temperature70C': double.parse(temp70.toStringAsFixed(1)),
       };
       batch.set(readings.doc(), latest);
     }
@@ -509,6 +531,7 @@ class CloudService {
         'autonomyDays': 20.0,
         'lastReportAt': now.toIso8601String(),
         'isDemo': true,
+        'hasSoilProfile': true,
       });
     }
     return hours;

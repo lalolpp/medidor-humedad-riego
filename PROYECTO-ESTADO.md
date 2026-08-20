@@ -1,6 +1,6 @@
 # Estado del proyecto — Medidor de Humedad
 
-Actualizado: 2026-08-15
+Actualizado: 2026-08-19
 
 ## Etapa actual: ✅ Prototipo funcional — app + firmware + nube operativos
 
@@ -103,6 +103,22 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   `runApp` (los push se perdían con la app cerrada) y reintento de envíos fallidos (solo avanza
   `sentAt` cuando el envío tiene éxito). Pendiente de operación: secreto `FCM_SERVICE_ACCOUNT`
   en GitHub.
+- **Expansión del modelo de datos (OpenCode, 2026-08-19)**: nuevos campos `depthCm`
+  en devices, `targetMin`/`targetMax`/`stressMin` en sectores (bandas de gestión);
+  nuevas colecciones top-level `commands/{id}` (audit trail de comandos con
+  requestedAt/acknowledgedAt/startedAt/endedAt/status), `irrigationEvents/{id}`
+  (historial de riegos con deviceId/source/duration/humidityBefore/After),
+  `sectorClimate/{sectorId_date}` (agregados diarios: avg/min/max humedad y temp,
+  precipitación, ETP). Modelos Dart: `Command`, `IrrigationEvent`, `SectorClimate`.
+  Reglas Firestore desplegadas para las 3 colecciones + `depthCm` en update mask.
+  `flutter analyze` 0 errors, 0 issues en widgets.
+- **Resumen ejecutivo en dashboard (OpenCode, 2026-08-19)**: tarjeta con score de
+  salud del predio (0–100): humedad promedio 40%, batería 25%, conectividad 25% +
+  penalización por sectores críticos. Indicadores visuales OK/Alerta/Crítico.
+- **Seguridad de firmware v1.3.0 (OpenCode, 2026-08-19)**: `VALVE_MAX_OPEN_MIN`
+  (240 min) cierra automáticamente la válvula si lleva abierta demasiado tiempo;
+  `VALVE_MIN_BATTERY` (10%) impide abrir válvula con batería crítica; timestamp
+  `valveOpenedAt` para el timeout. Compila OK (verificar con `pio run`).
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
