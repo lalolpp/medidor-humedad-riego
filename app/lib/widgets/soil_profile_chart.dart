@@ -33,7 +33,7 @@ class SoilProfileChart extends StatelessWidget {
 
     final spots = [
       for (final entry in entries)
-        FlSpot(entry.value.clamp(0, 100), 110 - entry.key.toDouble()),
+        FlSpot(entry.value.clamp(0, 100).toDouble(), 110 - entry.key.toDouble()),
     ];
 
     return SizedBox(
@@ -49,16 +49,16 @@ class SoilProfileChart extends StatelessWidget {
             verticalRangeAnnotations: [
               VerticalRangeAnnotation(
                 x1: 0,
-                x2: irrigateBelow.clamp(0, 100),
+                x2: irrigateBelow.clamp(0, 100).toDouble(),
                 color: Colors.orange.withValues(alpha: 0.12),
               ),
               VerticalRangeAnnotation(
-                x1: optimalMin.clamp(0, 100),
-                x2: optimalMax.clamp(0, 100),
+                x1: optimalMin.clamp(0, 100).toDouble(),
+                x2: optimalMax.clamp(0, 100).toDouble(),
                 color: Colors.green.withValues(alpha: 0.15),
               ),
               VerticalRangeAnnotation(
-                x1: excessAbove.clamp(0, 100),
+                x1: excessAbove.clamp(0, 100).toDouble(),
                 x2: 100,
                 color: Colors.red.withValues(alpha: 0.10),
               ),
