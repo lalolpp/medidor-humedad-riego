@@ -11,6 +11,7 @@ import 'package:medidor_humedad/services/infiltration.dart';
 import 'package:medidor_humedad/widgets/dual_axis_chart.dart';
 import 'package:medidor_humedad/widgets/metrics_chart.dart';
 import 'package:medidor_humedad/widgets/signal_bars.dart';
+import 'package:medidor_humedad/widgets/soil_profile_chart.dart';
 
 class CloudDeviceDetailScreen extends StatefulWidget {
   final CloudDevice device;
@@ -322,6 +323,23 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                     style: const TextStyle(color: Colors.orange));
               }
               final readings = snapshot.data ?? [];
+              Reading? latestProfile;
+              for (final reading in readings.reversed) {
+                if (reading.hasSoilProfile) {
+                  latestProfile = reading;
+                  break;
+                }
+              }
+              final temp30Points = [
+                for (final r in readings)
+                  if (r.temperature30C != null)
+                    MetricPoint(r.timestamp, AppSettings.toDisplay(r.temperature30C!)),
+              ];
+              final temp70Points = [
+                for (final r in readings)
+                  if (r.temperature70C != null)
+                    MetricPoint(r.timestamp, AppSettings.toDisplay(r.temperature70C!)),
+              ];
               final humidityPoints = [
                 for (final r in readings) MetricPoint(r.timestamp, r.humidity),
               ];
@@ -333,6 +351,25 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (latestProfile != null) ...[
+                    Text('Perfil de humedad · sonda 100 cm',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    SoilProfileChart(
+                      reading: latestProfile,
+                      irrigateBelow: 35,
+                      optimalMin: 40,
+                      optimalMax: 70,
+                      excessAbove: 80,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Bandas: bajo riego, rango objetivo y exceso. Los valores '
+                      'se configurarán por cultivo y sector.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   MetricsChart(
                     series: [
                       MetricSeries(
@@ -345,6 +382,29 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
                     minY: 0,
                     maxY: 100,
                   ),
+                  if (temp30Points.isNotEmpty || temp70Points.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Text('Temperaturas PT1000 · 30 y 70 cm',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    MetricsChart(
+                      series: [
+                        if (temp30Points.isNotEmpty)
+                          MetricSeries(
+                            label: 'PT1000 · 30 cm',
+                            color: Colors.orange,
+                            points: temp30Points,
+                          ),
+                        if (temp70Points.isNotEmpty)
+                          MetricSeries(
+                            label: 'PT1000 · 70 cm',
+                            color: Colors.deepOrangeAccent,
+                            points: temp70Points,
+                          ),
+                      ],
+                      unitLabel: suffix,
+                    ),
+                  ],
                   if (tempPoints.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text('Temperatura del suelo',
