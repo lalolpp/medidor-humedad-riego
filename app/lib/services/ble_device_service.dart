@@ -24,10 +24,17 @@ class BleDeviceService implements DeviceService {
   @override
   Future<List<DiscoveredDevice>> discover() async {
     _found.clear();
-    await FlutterBluePlus.turnOn();
-    await FlutterBluePlus.adapterState.firstWhere(
-      (state) => state == BluetoothAdapterState.on,
-    );
+
+    try {
+      await FlutterBluePlus.turnOn();
+    } catch (e) {
+      throw Exception('Activa el Bluetooth: $e');
+    }
+
+    final adapterState = await FlutterBluePlus.adapterState.first;
+    if (adapterState != BluetoothAdapterState.on) {
+      throw Exception('Bluetooth no disponible (estado: $adapterState)');
+    }
 
     final completer = Completer<List<ScanResult>>();
     final sub = FlutterBluePlus.scanResults.listen((results) {
@@ -35,10 +42,9 @@ class BleDeviceService implements DeviceService {
     });
 
     await FlutterBluePlus.startScan(
-      withServices: [Guid(kServiceUuid)],
-      timeout: const Duration(seconds: 8),
+      timeout: const Duration(seconds: 10),
     );
-    await Future.delayed(const Duration(seconds: 8));
+    await Future.delayed(const Duration(seconds: 10));
     await sub.cancel();
     await FlutterBluePlus.stopScan();
 

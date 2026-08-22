@@ -22,10 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _scanning = false;
   List<DiscoveredDevice> _devices = [];
   int _dashboardVersion = 0;
-
-  DeviceService get _service => _demoMode
-      ? DemoDeviceService()
-      : BleDeviceService();
+  DeviceService _service = DemoDeviceService();
 
   @override
   void initState() {
@@ -68,7 +65,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onModeChanged(bool demo) {
-    setState(() => _demoMode = demo);
+    setState(() {
+      _demoMode = demo;
+      _service = demo ? DemoDeviceService() : BleDeviceService();
+    });
     _discover();
   }
 
@@ -80,6 +80,50 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDevice(DiscoveredDevice device) async {
+    final isBle = _service.isDemo == false;
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          isBle ? Icons.bluetooth : Icons.phone_android,
+          color: isBle ? Colors.blue : Colors.grey,
+          size: 40,
+        ),
+        title: Text(device.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isBle
+                  ? '¿Conectar a este dispositivo por Bluetooth?'
+                  : '¿Entrar en modo demo (sin hardware real)?',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'ID: ${device.id}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            if (isBle && device.rssi != 0)
+              Text(
+                'Señal: ${device.rssi} dBm',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(isBle ? 'Conectar' : 'Iniciar demo'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => DeviceDetailScreen(service: _service, device: device),
@@ -146,6 +190,22 @@ class _HomeScreenState extends State<HomeScreen> {
               label: Text(_demoMode ? 'Recargar demo' : 'Buscar dispositivos'),
             ),
           ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              'Cercanos (BLE / demo)',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (_devices.isEmpty && !_scanning)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'No se encontraron dispositivos cercanos',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          for (final device in _devices) _deviceCard(device),
           if (showCloud) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -161,22 +221,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const Divider(height: 24),
           ],
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
-            child: Text(
-              'Cercanos (BLE / demo)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-          if (_devices.isEmpty && !_scanning)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'No se encontraron dispositivos cercanos',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-          for (final device in _devices) _deviceCard(device),
         ],
         ),
       ),

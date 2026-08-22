@@ -40,10 +40,12 @@ class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) override {
     clientConnected = true;
     histCursor = 0;
+    Serial.println("[BLE] Cliente conectado");
   }
   void onDisconnect(BLEServer *server) override {
     clientConnected = false;
     server->getAdvertising()->start();
+    Serial.println("[BLE] Cliente desconectado, reanunciando...");
   }
 };
 
@@ -51,6 +53,7 @@ class IntervalCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *chr) override {
     String value = String(chr->getValue().c_str());
     uint16_t interval = (uint16_t)value.toInt();
+    Serial.printf("[BLE] Intervalo configurado: %u min\n", interval);
     settingsSetInterval(interval);
     updateAutonomyText();
   }
@@ -98,6 +101,7 @@ void bleInit() {
   advertising->addServiceUUID(UUID_SERVICE);
   advertising->setScanResponse(true);
   BLEDevice::startAdvertising();
+  Serial.println("[BLE] Anunciando como " BLE_DEVICE_NAME);
 
   updateAutonomyText();
 }

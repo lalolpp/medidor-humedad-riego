@@ -268,9 +268,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     ),
                   ),
                 )
-              : ListView(
+              :                     ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _connectionBadge(context),
+                    const SizedBox(height: 16),
                     if (_canClaim) ...[
                       _claimCard(context),
                       const SizedBox(height: 16),
@@ -284,6 +286,46 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     _historyCard(context),
                   ],
                 ),
+    );
+  }
+
+  Widget _connectionBadge(BuildContext context) {
+    final isBle = widget.service.isDemo == false;
+    return Card(
+      color: isBle
+          ? Colors.green.shade50
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              isBle ? Icons.bluetooth : Icons.phone_android,
+              color: isBle ? Colors.blue : Colors.grey,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isBle ? 'Conectado por Bluetooth' : 'Modo demo (sin hardware)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isBle ? Colors.green.shade800 : Colors.grey.shade700,
+                    ),
+                  ),
+                  Text(
+                    'ID: ${widget.device.id}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

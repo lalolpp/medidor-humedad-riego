@@ -16,6 +16,7 @@
 
 static unsigned long bleWindowEnd = 0;
 static unsigned long valveOpenedAt = 0;
+static float lastBatteryVoltage = 0.0f;
 
 void setup() {
   Serial.begin(115200);
@@ -25,6 +26,7 @@ void setup() {
   valveInit();
 
   SensorReading r = readSensor();
+  lastBatteryVoltage = r.batteryVoltage;
   readingsAppend(r, settings().samplingIntervalMin);
 
   if (settings().cloudEnabled) {
@@ -103,11 +105,17 @@ void loop() {
   }
 #endif
 
+  bool usbPower = lastBatteryVoltage >= 4.15f;
+  if (usbPower && millis() >= bleWindowEnd) {
+    bleWindowEnd = millis() + BLE_KEEP_ALIVE_MS;
+  }
   if (millis() >= bleWindowEnd
 #if VALVE_KEEP_AWAKE
       && !valveActive()
 #endif
+      && !usbPower
   ) {
+    Serial.printf("[PWR] Batería %.2fV, entrando deep sleep\n", lastBatteryVoltage);
     esp_deep_sleep((uint64_t)settings().samplingIntervalMin * 60ULL * 1000000ULL);
   }
   delay(10);
