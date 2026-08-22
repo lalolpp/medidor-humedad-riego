@@ -14,6 +14,7 @@ const String kUuidLive = '3c8a2d6f-5b2a-4e3a-8f6d-9c1d0e2f3a4b';
 const String kUuidBattery = '5a5b6c7d-8e9f-4a5b-8c7d-9e0f1a2b3c4d';
 const String kUuidHistCount = '7d7e8f90-1234-4a5b-9c8d-1e2f3a4b5c6d';
 const String kUuidHistNext = '8e8f9a0b-1234-4a5b-8c7d-9e0f1a2b3c4d';
+const String kUuidWifi = 'c1a5f0d2-77e8-4b39-9a44-52f10de91b63';
 
 class BleDeviceService implements DeviceService {
   final Map<String, BluetoothDevice> _found = {};
@@ -75,6 +76,58 @@ class BleDeviceService implements DeviceService {
     await dev.connect(license: License.nonprofit);
     await dev.discoverServices();
     return BleNodoConnection(dev);
+  }
+
+  /// Envía credenciales WiFi (y opcionalmente el ID de nube) al nodo por BLE.
+  /// El nodo las guarda y las usará en su próximo ciclo para publicar.
+  Future<void> sendWifiCredentials(
+    DiscoveredDevice device,
+    String ssid,
+    String password, {
+    String? cloudId,
+  }) async {
+    final dev = _found[device.id] ??
+        _putIfAbsent(BluetoothDevice.fromId(device.id));
+    try {
+      await dev.connect(license: License.nonprofit);
+      await dev.discoverServices();
+
+      BluetoothCharacteristic? wifiChr;
+      for (final service in dev.servicesList) {
+        if (service.uuid.str != kServiceUuid) continue;
+        for (final c in service.characteristics) {
+          if (c.uuid.str == kUuidWifi) wifiChr = c;
+        }
+      }
+      if (wifiChr == null) {
+        throw Exception(
+            'Este nodo no soporta configuración WiFi (actualiza su firmware)');
+      }
+
+      await wifiChr.write(
+        utf8.encode(jsonEncode({
+          'ssid': ssid,
+          'pass': password,
+          if (cloudId != null && cloudId.isNotEmpty) 'id': cloudId,
+        })),
+      );
+      final resp = await wifiChr.read();
+      final text = utf8.decode(resp, allowMalformed: true).trim().toUpperCase();
+      if (text.startsWith('ERR')) {
+        throw Exception(switch (text) {
+          'ERR:JSON' => 'El nodo no entendió los datos',
+          'ERR:SSID' => 'Falta el nombre de la red (SSID)',
+          'ERR:LEN' => 'La red o contraseña es demasiado larga',
+          _ => 'El nodo rechazó la configuración ($text)',
+        });
+      }
+    } finally {
+      if (dev.isConnected) await dev.disconnect();
+    }
+  }
+
+  BluetoothDevice _putIfAbsent(BluetoothDevice dev) {
+    return _found.putIfAbsent(dev.remoteId.str, () => dev);
   }
 }
 

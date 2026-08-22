@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:medidor_humedad/models/device.dart';
 import 'package:medidor_humedad/services/app_firebase.dart';
+import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/ble_device_service.dart';
 import 'package:medidor_humedad/services/demo_device_service.dart';
@@ -124,6 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (confirmed != true) return;
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => DeviceDetailScreen(service: _service, device: device),
@@ -170,6 +172,34 @@ class _HomeScreenState extends State<HomeScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
+          ValueListenableBuilder<ConnectionMode>(
+            valueListenable: AppSettings.connectionMode,
+            builder: (context, mode, _) {
+              if (mode != ConnectionMode.wifi) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Card(
+                  color: Colors.blue.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.wifi, color: Colors.blue, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Modo internet activo: monitorea tus nodos con WiFi '
+                            'desde el Dashboard, estés donde estés.',
+                            style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           SwitchListTile(
             title: const Text('Modo demo (sin hardware)'),
             subtitle: const Text('Simula un nodo para probar la app'),

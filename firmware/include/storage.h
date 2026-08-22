@@ -19,4 +19,6 @@ Settings &settings();
 void settingsLoad();
 void settingsSave();
 bool settingsSetInterval(uint16_t intervalMin);
+bool settingsSetWifi(const char *ssid, const char *pass);
+bool settingsSetDeviceId(const char *id);
 void settingsSetLastSyncedTs(uint32_t ts);

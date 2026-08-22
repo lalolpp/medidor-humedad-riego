@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:medidor_humedad/models/cloud_device.dart';
 import 'package:medidor_humedad/models/crop.dart';
+import 'package:medidor_humedad/models/device.dart';
 import 'package:medidor_humedad/models/field.dart';
+import 'package:medidor_humedad/services/app_settings.dart';
+import 'package:medidor_humedad/services/auth_service.dart';
+import 'package:medidor_humedad/services/ble_device_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/widgets/smart_dashboard.dart';
 
@@ -47,6 +52,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _openNodeWifiSetup() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kDbg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const _NodeWifiSheet(),
+    );
   }
 
   Future<void> _openCropForm({Crop? existing}) async {
@@ -134,6 +151,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                   children: [
+                    _sectionTitle('Conexión del nodo',
+                        Icons.settings_input_antenna_outlined),
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        'Bluetooth: gestiona el nodo estando al lado. WiFi: '
+                        'el nodo se conecta a internet y lo monitoreas desde '
+                        'cualquier lugar del mundo.',
+                        style: TextStyle(color: kText2, fontSize: 12),
+                      ),
+                    ),
+                    ValueListenableBuilder<ConnectionMode>(
+                      valueListenable: AppSettings.connectionMode,
+                      builder: (context, mode, _) => SegmentedButton<ConnectionMode>(
+                        selected: {mode},
+                        segments: const [
+                          ButtonSegment(
+                            value: ConnectionMode.bluetooth,
+                            icon: Icon(Icons.bluetooth),
+                            label: Text('Bluetooth'),
+                          ),
+                          ButtonSegment(
+                            value: ConnectionMode.wifi,
+                            icon: Icon(Icons.wifi),
+                            label: Text('WiFi / Internet'),
+                          ),
+                        ],
+                        onSelectionChanged: (selection) => setState(
+                            () => AppSettings.connectionMode.value = selection.first),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => _openNodeWifiSetup(),
+                      style: FilledButton.styleFrom(backgroundColor: kGreen),
+                      icon: const Icon(Icons.wifi_tethering),
+                      label: const Text('Configurar WiFi del nodo'),
+                    ),
+                    const SizedBox(height: 24),
                     _sectionTitle('Compartir acceso',
                         Icons.people_outline),
                     const Padding(
@@ -340,6 +396,274 @@ class _SettingsScreenState extends State<SettingsScreen> {
             tooltip: 'Editar',
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NodeWifiSheet extends StatefulWidget {
+  const _NodeWifiSheet();
+
+  @override
+  State<_NodeWifiSheet> createState() => _NodeWifiSheetState();
+}
+
+class _NodeWifiSheetState extends State<_NodeWifiSheet> {
+  final _ble = BleDeviceService();
+  final _ssidCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+
+  bool _scanning = false;
+  bool _sending = false;
+  List<DiscoveredDevice> _devices = [];
+  DiscoveredDevice? _selected;
+  List<CloudDevice> _cloudDevices = [];
+  String? _selectedCloudId;
+
+  @override
+  void initState() {
+    super.initState();
+    _scan();
+    _loadCloudDevices();
+  }
+
+  Future<void> _loadCloudDevices() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final devices = await CloudService.instance.myDevices(uid);
+      if (!mounted) return;
+      setState(() => _cloudDevices = devices);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _ssidCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _scan() async {
+    setState(() {
+      _scanning = true;
+      _selected = null;
+    });
+    try {
+      final devices = await _ble.discover();
+      devices.sort((a, b) => b.rssi.compareTo(a.rssi));
+      if (!mounted) return;
+      setState(() => _devices = devices);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al escanear: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _send() async {
+    final device = _selected;
+    final ssid = _ssidCtrl.text.trim();
+    if (device == null || ssid.isEmpty) return;
+    setState(() => _sending = true);
+    try {
+      await _ble.sendWifiCredentials(
+        device,
+        ssid,
+        _passCtrl.text,
+        cloudId: _selectedCloudId,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'WiFi "$ssid" guardado en el nodo. Se conectará en su próximo ciclo.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo configurar: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.wifi_tethering, color: kGreen, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Configurar WiFi del nodo',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: kText),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _scanning ? null : _scan,
+                  icon: const Icon(Icons.refresh, color: kBlue, size: 20),
+                  tooltip: 'Re-escanear',
+                ),
+              ],
+            ),
+            const Text(
+              'Deja el nodo cerca (menos de 2 m), enciéndelo con RST y '
+              'selecciona tu Medidor Humedad.',
+              style: TextStyle(color: kText2, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            if (_scanning)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_devices.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'No se encontraron nodos. Presiona RST en el nodo y vuelve a intentar.',
+                  style: TextStyle(color: kText2, fontSize: 13),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 180),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _devices.length,
+                  itemBuilder: (context, i) {
+                    final d = _devices[i];
+                    final sel = _selected?.id == d.id;
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(Icons.sensors,
+                          color: sel ? kGreen : kText2, size: 20),
+                      title: Text(d.name,
+                          style:
+                              TextStyle(fontSize: 14, color: kText)),
+                      subtitle: Text('${d.rssi} dBm',
+                          style: TextStyle(
+                              fontSize: 11, color: kText2)),
+                      trailing:
+                          sel ? Icon(Icons.check_circle, color: kGreen, size: 20) : null,
+                      onTap: () => setState(() => _selected = d),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _ssidCtrl,
+              enabled: _selected != null && !_sending,
+              style: TextStyle(color: kText),
+              decoration: InputDecoration(
+                labelText: 'Red WiFi (SSID)',
+                labelStyle: TextStyle(color: kText2),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: kBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: kGreen),
+                ),
+                filled: true,
+                fillColor: kCard,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _passCtrl,
+              enabled: _selected != null && !_sending,
+              obscureText: true,
+              style: TextStyle(color: kText),
+              decoration: InputDecoration(
+                labelText: 'Contraseña',
+                labelStyle: TextStyle(color: kText2),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: kBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: kGreen),
+                ),
+                filled: true,
+                fillColor: kCard,
+              ),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedCloudId,
+              style: TextStyle(color: kText, fontSize: 14),
+              dropdownColor: kCard,
+              decoration: InputDecoration(
+                labelText:
+                    'Vincular a dispositivo en la nube (recomendado)',
+                labelStyle: TextStyle(color: kText2, fontSize: 13),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: kBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: kGreen),
+                ),
+                filled: true,
+                fillColor: kCard,
+              ),
+              items: [
+                const DropdownMenuItem(
+                    value: null, child: Text('Sin vincular')),
+                for (final d in _cloudDevices)
+                  DropdownMenuItem(value: d.deviceId, child: Text(d.name)),
+              ],
+              onChanged: (_selected != null && !_sending)
+                  ? (v) => setState(() => _selectedCloudId = v)
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: (_selected != null &&
+                        _ssidCtrl.text.trim().isNotEmpty &&
+                        !_sending)
+                    ? _send
+                    : null,
+                style: FilledButton.styleFrom(backgroundColor: kGreen),
+                icon: _sending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.send_outlined),
+                label: Text(_sending ? 'Enviando…' : 'Enviar al nodo'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

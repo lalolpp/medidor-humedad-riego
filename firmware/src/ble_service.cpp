@@ -6,6 +6,7 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <ArduinoJson.h>
 
 #define UUID_SERVICE "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define UUID_CHR_INTERVAL "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -14,6 +15,7 @@
 #define UUID_CHR_BATTERY "5a5b6c7d-8e9f-4a5b-8c7d-9e0f1a2b3c4d"
 #define UUID_CHR_HIST_COUNT "7d7e8f90-1234-4a5b-9c8d-1e2f3a4b5c6d"
 #define UUID_CHR_HIST_NEXT "8e8f9a0b-1234-4a5b-8c7d-9e0f1a2b3c4d"
+#define UUID_CHR_WIFI "c1a5f0d2-77e8-4b39-9a44-52f10de91b63"
 
 static BLECharacteristic *intervalChr = nullptr;
 static BLECharacteristic *autonomyChr = nullptr;
@@ -21,6 +23,7 @@ static BLECharacteristic *liveChr = nullptr;
 static BLECharacteristic *batteryChr = nullptr;
 static BLECharacteristic *histCountChr = nullptr;
 static BLECharacteristic *histNextChr = nullptr;
+static BLECharacteristic *wifiChr = nullptr;
 
 static bool clientConnected = false;
 static size_t histCursor = 0;
@@ -62,6 +65,37 @@ class IntervalCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
+// Recibe credenciales WiFi como JSON {"ssid":"...","pass":"..."} y las guarda.
+// Responde "OK" o "ERR:<motivo>" para que la app lea el resultado.
+class WifiCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *chr) override {
+    String value = String(chr->getValue().c_str());
+    Serial.printf("[BLE] Config WiFi recibida (%u bytes)\n", value.length());
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, value);
+    if (err) {
+      chr->setValue("ERR:json");
+      return;
+    }
+    const char *ssid = doc["ssid"] | "";
+    const char *pass = doc["pass"] | "";
+    if (ssid[0] == '\0') {
+      chr->setValue("ERR:ssid");
+      return;
+    }
+    if (!settingsSetWifi(ssid, pass)) {
+      chr->setValue("ERR:len");
+      return;
+    }
+    const char *id = doc["id"] | "";
+    if (id[0] != '\0' && !settingsSetDeviceId(id)) {
+      chr->setValue("ERR:id");
+      return;
+    }
+    chr->setValue("OK");
+  }
+};
+
 class HistNextCallbacks : public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *chr) override {
     static char buf[1536];
@@ -94,6 +128,9 @@ void bleInit() {
   histCountChr = service->createCharacteristic(UUID_CHR_HIST_COUNT, BLECharacteristic::PROPERTY_READ);
   histNextChr = service->createCharacteristic(UUID_CHR_HIST_NEXT, BLECharacteristic::PROPERTY_READ);
   histNextChr->setCallbacks(new HistNextCallbacks());
+
+  wifiChr = service->createCharacteristic(UUID_CHR_WIFI, BLECharacteristic::PROPERTY_WRITE);
+  wifiChr->setCallbacks(new WifiCallbacks());
 
   service->start();
 

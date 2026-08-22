@@ -28,6 +28,7 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
   bool _exporting = false;
   bool _savingInterval = false;
   bool _seedingDemo = false;
+  bool _togglingValve = false;
   int? _interval;
   final _otaUrlController = TextEditingController();
   final _otaVersionController = TextEditingController();
@@ -299,6 +300,8 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
           const SizedBox(height: 16),
           _automationCard(d),
           const SizedBox(height: 16),
+          _manualIrrigationCard(d),
+          const SizedBox(height: 16),
           _intervalCard(d),
           if (_canManage(d)) ...[
             const SizedBox(height: 16),
@@ -547,6 +550,78 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
         onTap: _openAutomation,
       ),
     );
+  }
+
+  Widget _manualIrrigationCard(CloudDevice d) {
+    final on = d.valveState == 'ON';
+    final canManage = _canManage(d);
+    return Card(
+      child: SwitchListTile(
+        secondary: Icon(
+          Icons.water_drop,
+          color: on ? Colors.green : Colors.grey,
+        ),
+        title: const Text('Riego manual'),
+        subtitle: Text(
+          _togglingValve
+              ? 'Enviando comando…'
+              : on
+                  ? 'Regando · toca para detener'
+                  : 'Apagado · toca para iniciar',
+        ),
+        value: on,
+        onChanged: (canManage && !_togglingValve)
+            ? (_) => _toggleManualIrrigation(!on)
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _toggleManualIrrigation(bool on) async {
+    if (on) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.water_drop, color: Colors.blue, size: 40),
+          title: const Text('Iniciar riego'),
+          content: const Text(
+            'El nodo abrirá la válvula en su próximo ciclo. Si está '
+            'conectado por USB, presiona RST para que lo aplique de inmediato.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Regar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() => _togglingValve = true);
+    try {
+      await CloudService.instance
+          .setValveCommand(_device.deviceId, on ? 'ON' : 'OFF', 'manual');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(on ? 'Comando de riego enviado' : 'Riego detenido'),
+        ),
+      );
+      await _refreshDevice();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _togglingValve = false);
+    }
   }
 
   (String, IconData, Color) _automationInfo(String? state, String? valve) {
