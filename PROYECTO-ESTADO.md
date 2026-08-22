@@ -1,6 +1,6 @@
 # Estado del proyecto — Medidor de Humedad
 
-Actualizado: 2026-08-19
+Actualizado: 2026-08-22
 
 ## Etapa actual: ✅ Prototipo funcional — app + firmware + nube operativos
 
@@ -9,6 +9,28 @@ app Flutter existen, compilan y corren. La integración con el **proyecto Fireba
 `medidor-de-humedad`** está **completa**: Auth (email/Google), Firestore (reglas
 desplegadas), firmware publicando telemetría por Firestore REST con ID token,
 dashboard con el diseño real del campo (8 sectores de riego) y APK release generado.
+
+## Sesión 2026-08-22 (PC de lalo) — BLE real probado ✅
+
+- **Conexión BLE real app↔nodo verificada**: celular Android ↔ ESP32 DevKit V1 (CP2102,
+  COM3, MAC `b0:3f:d3:5c:51:1c`). El nodo anuncia "MedidorHumedad", la app lo encuentra,
+  diálogo de confirmación, badge verde "Conectado por Bluetooth" con ID.
+- **Driver CP210x instalado** (el chip del DevKit es CP2102, no CH340).
+- **Nodo despierto mientras hay USB**: si la batería lee ≥4,15 V (USB puesto) no entra
+  en deep sleep y mantiene la ventana BLE abierta permanentemente (`main.cpp`). Con
+  batería duerme normal. Facilita las pruebas en banco.
+- **Logs BLE en serial**: `[BLE] Anunciando/Cliente conectado/Cliente desconectado`,
+  intervalo configurado por BLE queda registrado.
+- **Config WiFi vía BLE** (implementado en paralelo por ambos PCs; quedó la versión
+  del otro PC): característica `c1a5f0d2-…` recibe `{ssid, pass, id}` JSON, guarda en
+  NVS y responde. App: Ajustes → Configurar WiFi del nodo.
+- **Fix de instancia de servicio**: `_service` era un getter que creaba una instancia
+  nueva en cada acceso → al conectar decía "dispositivo no encontrado". Ahora se guarda
+  la instancia y se recrea solo al cambiar de modo demo/BLE.
+- **Sección "Cercanos" subida** en Home: ahora aparece antes que "Mi campo".
+- Nodo reflasheado con `esp32dev_ota` (particiones OTA) — borró NVS: reconfigurar WiFi
+  e ID desde la app (Ajustes → Configurar WiFi del nodo).
+- APK debug instalada en celu (`cl.riego.medidor_humedad`, adb `-s 101aa0c2`) con todo lo anterior.
 
 ## Lo que ya está hecho ✅
 
@@ -122,9 +144,16 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
 
 ## Lo que falta / debemos hacer ahora 🔧 (en orden)
 
-> División de trabajo: **Qwen Coder** → revisión de código, testing.
-> **OpenCode** → RSSI en nube ✅, FCM/alertas por umbral ✅, LTE A7670E, OTA en terreno,
-> automatización de riego, widgets de pantalla de inicio.
+> Detalle operativo del día a día en `NOTA-ESTADO-Y-PENDIENTES.md` (2026-08-22).
+
+### 0. Inmediato (tras reflasheo con particiones OTA)
+- [ ] Configurar WiFi desde la app: Ajustes → Configurar WiFi del nodo → "MedidorHumedad"
+      → red de la oficina → vincular a "Medidor Humedad Demo". Verificar en serie
+      `[WIFI] Credenciales guardadas` y `[NVS] deviceId = demo-001`.
+- [ ] Probar extremo a extremo: nodo publica a demo-001 → el relé debe activarse
+      (valveState ON sigue en Firestore). Cortar con switch de Riego manual.
+- [ ] Recompilar y desplegar: APK release + Windows release + release v1.0 GitHub
+      (`lalolpp/medidor-humedad-apk`, `--clobber`) + actualizar pendrive `D:\medidor-humedad-windows.zip`.
 
 ### 1. Enlace de cobertura (RSSI en nube) — ✅ hecho por OpenCode
 - [x] Mostrar la última RSSI (de readings) en las tarjetas del dashboard y detalle de sonda,
@@ -168,6 +197,12 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
 - [ ] Sensor SEN0193: calibrar ADC → % humedad (seco vs saturado) en `sensor.cpp`.
 - [ ] Confirmar divisor de batería y ajustar `BATTERY_DIVIDER_GAIN` en `config.h`.
 
-### 8. Verificación final
+### 8. Features en cola (pedidos por el usuario)
+- [ ] Interruptor en Ajustes para activar/desactivar notificaciones.
+- [ ] Datos demo extensos (14 días) para el gráfico "Evolución de humedad promedio" del Sector 1.
+- [ ] Borrar rama remota `feat/soil-profile-100cm` (ya integrada).
+
+### 9. Verificación final
 - [ ] `pio run` y `flutter analyze`/`flutter test`/`flutter build` antes de cada release.
-- [ ] Probar BLE real entre app y nodo; probar compartir entre dos cuentas.
+- [x] Probar BLE real entre app y nodo — ✅ verificado 2026-08-22.
+- [ ] Probar compartir entre dos cuentas.
