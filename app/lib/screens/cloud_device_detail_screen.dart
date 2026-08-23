@@ -184,9 +184,13 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
 
   Future<void> _refreshDevice() async {
     final fresh = await CloudService.instance.deviceFor(_device.deviceId);
-    if (mounted && fresh != null) {
-      setState(() => _device = fresh);
-    }
+    // El comando real (config/current) manda sobre automationStatus: el
+    // switch de riego manual debe reflejar lo que el nodo va a aplicar.
+    final cmd = await CloudService.instance.readValveCommand(_device.deviceId);
+    if (!mounted) return;
+    var dev = fresh ?? _device;
+    if (cmd != null) dev = dev.copyWith(valveState: cmd);
+    setState(() => _device = dev);
   }
 
   Future<void> _openAutomation() async {
@@ -606,6 +610,14 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
     try {
       await CloudService.instance
           .setValveCommand(_device.deviceId, on ? 'ON' : 'OFF', 'manual');
+      // Sincroniza automationStatus para que el switch (y el resto de la app)
+      // reflejen el comando manual sin esperar a que corra la automatización.
+      await CloudService.instance.updateAutomationStatus(
+        _device.deviceId,
+        state: on ? 'irrigating' : 'idle',
+        reason: on ? 'Riego manual iniciado' : 'Riego manual detenido',
+        valveState: on ? 'ON' : 'OFF',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

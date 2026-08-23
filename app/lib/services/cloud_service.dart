@@ -358,6 +358,23 @@ class CloudService {
     }, SetOptions(merge: true));
   }
 
+  /// Lee el comando de válvula REAL pendiente en config/current (lo que el
+  /// nodo aplica). Es la fuente de verdad para el switch de riego manual:
+  /// el campo automationStatus del doc puede quedar desactualizado.
+  Future<String?> readValveCommand(String deviceId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('devices')
+          .doc(deviceId)
+          .collection('config')
+          .doc('current')
+          .get();
+      return snap.data()?['valveState'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Actualiza el estado resumido de automatización que muestra la app.
   Future<void> updateAutomationStatus(
     String deviceId, {

@@ -49,6 +49,36 @@ class CloudDevice {
     this.automationLastToggleAt,
   });
 
+  CloudDevice copyWith({
+    String? valveState,
+    String? automationState,
+    String? automationReason,
+  }) =>
+      CloudDevice(
+        deviceId: deviceId,
+        name: name,
+        owner: owner,
+        fieldId: fieldId,
+        cropId: cropId,
+        sectorId: sectorId,
+        location: location,
+        lastReportAt: lastReportAt,
+        humidity: humidity,
+        soilTemp: soilTemp,
+        batteryLevel: batteryLevel,
+        autonomyDays: autonomyDays,
+        intervalMin: intervalMin,
+        rssi: rssi,
+        shares: shares,
+        isDemo: isDemo,
+        automation: automation,
+        automationState: automationState ?? this.automationState,
+        automationReason: automationReason ?? this.automationReason,
+        valveState: valveState ?? this.valveState,
+        automationStartedAt: automationStartedAt,
+        automationLastToggleAt: automationLastToggleAt,
+      );
+
   factory CloudDevice.fromMap(String id, Map<String, dynamic> data) {
     final status = data['automationStatus'] as Map<String, dynamic>? ?? {};
     return CloudDevice(
