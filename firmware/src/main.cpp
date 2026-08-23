@@ -18,11 +18,60 @@ static unsigned long bleWindowEnd = 0;
 static unsigned long valveOpenedAt = 0;
 static float lastBatteryVoltage = 0.0f;
 
+#if DEBUG_ALWAYS_ON
+static unsigned long nextPublishAt = 0;
+#endif
+
+// Ciclo completo de nube: login, comando de válvula, configuración remota,
+// publicación con backfill y chequeo OTA. Llamar con BLE detenido: WiFi+TLS
+// necesitan toda la RAM disponible.
+static void runCloudCycle(SensorReading &r) {
+  Serial.println("[CLOUD] habilitado, intentando ciclo de publicación");
+  if (!cloudLogin()) return;
+
+  // Aplica el comando de riego antes de publicar: si la app ordenó abrir
+  // la válvula, este ciclo lo deja accionado (y el loop lo mantiene).
+  // Safety: no abre válvula si la batería está por debajo del mínimo.
+  String valveState;
+  if (cloudFetchValve(valveState)) {
+    if (valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY) {
+      Serial.printf("[VALVE] Batería baja (%.0f%%), ignorando comando ON\n",
+                    r.batteryLevel01 * 100);
+    } else {
+      valveSet(valveState == "ON");
+      if (valveActive()) {
+        valveOpenedAt = millis();
+      }
+    }
+  }
+
+  // Ajusta el intervalo de reporte según la configuración remota
+  // (configurado desde la app) antes de publicar.
+  settingsSetInterval(cloudFetchInterval(settings().samplingIntervalMin));
+  float days = autonomyDays(settings().samplingIntervalMin,
+                            settings().batteryCapacityMah, r.batteryLevel01);
+  if (cloudPublish(r, settings().samplingIntervalMin, days)) {
+    // Reenvía las lecturas que quedaron pendientes mientras no hubo red.
+    cloudBackfill(r.timestampSec);
+  }
+
+#ifdef ENABLE_OTA
+  String otaUrl, otaVersion;
+  if (cloudFetchOta(otaUrl, otaVersion) && otaVersion != FIRMWARE_VERSION) {
+    Serial.printf("[OTA] versión remota %s != local %s, actualizando...\n",
+                  otaVersion.c_str(), FIRMWARE_VERSION);
+    performOta(otaUrl);
+  }
+#endif
+
+  cloudDisconnect();
+}
+
 void setup() {
   Serial.begin(115200);
   sensorInit();
   settingsLoad();
-  Serial.printf("[NVS] wifiSsid='%s' deviceId='%s'\n", settings().wifiSsid,
+  Serial.printf("[NVS] wifiRedes=%d deviceId='%s'\n", wifiCount(),
                 settings().deviceId);
   readingsInit();
   valveInit();
@@ -32,46 +81,7 @@ void setup() {
   readingsAppend(r, settings().samplingIntervalMin);
 
   if (settings().cloudEnabled) {
-    Serial.println("[CLOUD] habilitado, intentando ciclo de publicación");
-    if (cloudLogin()) {
-      // Aplica el comando de riego antes de publicar: si la app ordenó abrir
-      // la válvula, este ciclo lo deja accionado (y el loop lo mantiene).
-      // Safety: no abre válvula si la batería está por debajo del mínimo.
-      String valveState;
-      if (cloudFetchValve(valveState)) {
-        if (valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY) {
-          Serial.printf("[VALVE] Batería baja (%.0f%%), ignorando comando ON\n",
-                        r.batteryLevel01 * 100);
-        } else {
-          valveSet(valveState == "ON");
-          if (valveActive()) {
-            valveOpenedAt = millis();
-          }
-        }
-      }
-      // Ajusta el intervalo de reporte según la configuración remota
-      // (configurado desde la app) antes de publicar.
-      settingsSetInterval(
-          cloudFetchInterval(settings().samplingIntervalMin));
-      float days = autonomyDays(settings().samplingIntervalMin,
-                                settings().batteryCapacityMah, r.batteryLevel01);
-      if (cloudPublish(r, settings().samplingIntervalMin, days)) {
-        // Reenvía las lecturas que quedaron pendientes mientras no hubo red.
-        cloudBackfill(r.timestampSec);
-      }
-
-#ifdef ENABLE_OTA
-      String otaUrl, otaVersion;
-      if (cloudFetchOta(otaUrl, otaVersion) &&
-          otaVersion != FIRMWARE_VERSION) {
-        Serial.printf("[OTA] versión remota %s != local %s, actualizando...\n",
-                      otaVersion.c_str(), FIRMWARE_VERSION);
-        performOta(otaUrl);
-      }
-#endif
-
-      cloudDisconnect();
-    }
+    runCloudCycle(r);
   }
 
 #if VALVE_KEEP_AWAKE
@@ -89,6 +99,11 @@ void setup() {
     bleSetLatestReading(r);
     bleWindowEnd = millis() + BLE_ADV_WINDOW_MS;
   }
+
+#if DEBUG_ALWAYS_ON
+  nextPublishAt =
+      millis() + (unsigned long)settings().samplingIntervalMin * 60000UL;
+#endif
 }
 
 void loop() {
@@ -96,6 +111,30 @@ void loop() {
   if (bleClientConnected()) {
     bleWindowEnd = millis() + BLE_KEEP_ALIVE_MS;
   }
+
+#if DEBUG_ALWAYS_ON
+  // Modo banco: sin deep sleep; repite el ciclo de nube cada intervalo,
+  // deteniendo BLE durante la publicación (RAM para WiFi+TLS).
+  if (millis() >= nextPublishAt) {
+    if (bleClientConnected()) {
+      nextPublishAt = millis() + 30000UL;  // espera a que la app suelte el nodo
+    } else if (valveActive()) {
+      nextPublishAt = millis() + VALVE_RECHECK_MS;
+    } else {
+      bleDeinit();
+      SensorReading r = readSensor();
+      lastBatteryVoltage = r.batteryVoltage;
+      readingsAppend(r, settings().samplingIntervalMin);
+      runCloudCycle(r);
+      bleInit();
+      bleSetLatestReading(r);
+      Serial.printf("[BENCH] ciclo listo, próximo en %u min\n",
+                    settings().samplingIntervalMin);
+      nextPublishAt =
+          millis() + (unsigned long)settings().samplingIntervalMin * 60000UL;
+    }
+  }
+#endif
 
 #if VALVE_KEEP_AWAKE
   // Mientras la válvula esté abierta el relé debe permanecer alimentado: no se

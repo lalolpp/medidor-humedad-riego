@@ -60,27 +60,64 @@ static String idToken() {
   return cachedToken;
 }
 
-static bool connectWiFi() {
-  Settings &s = settings();
-  if (s.wifiSsid[0] == '\0') {
-    Serial.println("[NET] sin credenciales WiFi");
-    return false;
-  }
-  Serial.printf("[NET] conectando a '%s'…\n", s.wifiSsid);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(s.wifiSsid, s.wifiPass);
+static bool tryConnect(const char *ssid, const char *pass, unsigned long timeoutMs) {
+  Serial.printf("[NET] conectando a '%s'…\n", ssid);
+  WiFi.disconnect();
+  WiFi.begin(ssid, pass);
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
     delay(100);
   }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[NET] WiFi OK, IP=%s RSSI=%d\n",
+    Serial.printf("[NET] WiFi OK (%s) IP=%s RSSI=%d\n", ssid,
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
-  } else {
-    Serial.printf("[NET] WiFi FAIL (status=%d tras %lus)\n", WiFi.status(),
-                  (unsigned long)((millis() - start) / 1000));
+    return true;
   }
-  return WiFi.status() == WL_CONNECTED;
+  Serial.printf("[NET] WiFi FAIL '%s' (status=%d)\n", ssid, WiFi.status());
+  return false;
+}
+
+// Multi-WiFi: escanea el entorno, elige la red conocida con mejor señal y
+// conecta. Si el escaneo no encuentra ninguna, intenta una por una.
+static bool connectWiFi() {
+  const int n = wifiCount();
+  if (n == 0) {
+    Serial.println("[NET] sin redes WiFi guardadas");
+    return false;
+  }
+  WiFi.mode(WIFI_STA);
+
+  int bestIdx = -1;
+  int bestRssi = -127;
+  Serial.println("[NET] escaneando redes conocidas…");
+  const int found = WiFi.scanNetworks();
+  for (int f = 0; f < found; f++) {
+    String seen = WiFi.SSID(f);
+    for (int i = 0; i < n; i++) {
+      char ssid[33], pass[65];
+      if (!wifiGet(i, ssid, sizeof(ssid), pass, sizeof(pass))) continue;
+      if (seen == ssid && (int)WiFi.RSSI(f) > bestRssi) {
+        bestRssi = (int)WiFi.RSSI(f);
+        bestIdx = i;
+      }
+    }
+  }
+  WiFi.scanDelete();
+
+  char ssid[33] = {0}, pass[65] = {0};
+  if (bestIdx >= 0 && wifiGet(bestIdx, ssid, sizeof(ssid), pass, sizeof(pass))) {
+    if (tryConnect(ssid, pass, 12000)) return true;
+    Serial.println("[NET] falló la red con mejor señal; probando las demás…");
+  }
+
+  for (int i = 0; i < n; i++) {
+    if (i == bestIdx) continue;
+    if (!wifiGet(i, ssid, sizeof(ssid), pass, sizeof(pass))) continue;
+    if (tryConnect(ssid, pass, 8000)) return true;
+  }
+
+  Serial.println("[NET] sin conexión a ninguna red conocida");
+  return false;
 }
 
 bool cloudLogin() {

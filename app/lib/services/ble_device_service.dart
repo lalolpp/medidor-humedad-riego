@@ -79,14 +79,12 @@ class BleDeviceService implements DeviceService {
     return BleNodoConnection(dev);
   }
 
-  /// Envía credenciales WiFi (y opcionalmente el ID de nube) al nodo por BLE.
-  /// El nodo las guarda y las usará en su próximo ciclo para publicar.
-  Future<void> sendWifiCredentials(
+  /// Conecta al nodo, localiza el característico WiFi y ejecuta [action];
+  /// desconecta al terminar (con error también).
+  Future<T> _withWifiChr<T>(
     DiscoveredDevice device,
-    String ssid,
-    String password, {
-    String? cloudId,
-  }) async {
+    Future<T> Function(BluetoothCharacteristic wifiChr) action,
+  ) async {
     final dev = _found[device.id] ??
         _putIfAbsent(BluetoothDevice.fromId(device.id));
     try {
@@ -110,37 +108,81 @@ class BleDeviceService implements DeviceService {
         throw Exception(
             'Este nodo no soporta configuración WiFi (actualiza su firmware)');
       }
-
-      final payload = utf8.encode(jsonEncode({
-        'ssid': ssid,
-        'pass': password,
-        if (cloudId != null && cloudId.isNotEmpty) 'id': cloudId,
-      }));
-      debugPrint('[WIFI-CFG] payload: ssid="$ssid" id="${cloudId ?? '-'}" '
-          '(${payload.length} bytes)');
-      debugPrint(
-          '[WIFI-CFG] escribiendo ${payload.length} bytes en $kUuidWifi');
-      await wifiChr.write(payload, timeout: 10);
-      debugPrint('[WIFI-CFG] escrito OK, leyendo respuesta…');
-      String text = 'OK';
-      try {
-        final resp = await wifiChr.read(timeout: 5);
-        text =
-            utf8.decode(resp, allowMalformed: true).trim().toUpperCase();
-        debugPrint('[WIFI-CFG] respuesta del nodo: $text');
-      } catch (e) {
-        debugPrint('[WIFI-CFG] sin respuesta legible ($e); asumiendo guardado');
-      }
-      if (text.startsWith('ERR')) {
-        throw Exception(switch (text) {
-          'ERR:JSON' => 'El nodo no entendió los datos',
-          'ERR:SSID' => 'Falta el nombre de la red (SSID)',
-          'ERR:LEN' => 'La red o contraseña es demasiado larga',
-          _ => 'El nodo rechazó la configuración ($text)',
-        });
-      }
+      return await action(wifiChr);
     } finally {
       if (dev.isConnected) await dev.disconnect();
+    }
+  }
+
+  Future<String> _writeAndRead(BluetoothCharacteristic chr, List<int> payload) async {
+    await chr.write(payload, timeout: 10);
+    try {
+      final resp = await chr.read(timeout: 5);
+      return utf8.decode(resp, allowMalformed: true).trim().toUpperCase();
+    } catch (_) {
+      return 'OK';
+    }
+  }
+
+  /// Envía credenciales WiFi (y opcionalmente el ID de nube) al nodo por BLE.
+  /// El nodo las guarda en su lista multi-WiFi y las usará en su próximo ciclo.
+  Future<void> sendWifiCredentials(
+    DiscoveredDevice device,
+    String ssid,
+    String password, {
+    String? cloudId,
+  }) async {
+    final payload = utf8.encode(jsonEncode({
+      'op': 'add',
+      'ssid': ssid,
+      'pass': password,
+      if (cloudId != null && cloudId.isNotEmpty) 'id': cloudId,
+    }));
+    debugPrint('[WIFI-CFG] payload: ssid="$ssid" id="${cloudId ?? '-'}" '
+        '(${payload.length} bytes)');
+    final text = await _withWifiChr(
+      device,
+      (chr) => _writeAndRead(chr, payload),
+    );
+    debugPrint('[WIFI-CFG] respuesta del nodo: $text');
+    if (text.startsWith('ERR')) {
+      throw Exception(switch (text) {
+        'ERR:JSON' => 'El nodo no entendió los datos',
+        'ERR:SSID' => 'Falta el nombre de la red (SSID)',
+        'ERR:LEN' => 'La red o contraseña es demasiado larga',
+        'ERR:FULL' => 'Memoria llena (5 redes): elimina una antes de agregar otra',
+        'ERR:ID' => 'El nodo rechazó el ID de nube',
+        _ => 'El nodo rechazó la configuración ($text)',
+      });
+    }
+  }
+
+  /// Lee del nodo la lista de redes WiFi guardadas (sin contraseñas).
+  Future<List<String>> readSavedWifiNetworks(DiscoveredDevice device) async {
+    final text = await _withWifiChr(device, (chr) async {
+      final resp = await chr.read(timeout: 5);
+      return utf8.decode(resp, allowMalformed: true).trim();
+    });
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is List) {
+        return decoded.whereType<String>().toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Elimina una red guardada en el nodo.
+  Future<void> deleteWifiNetwork(DiscoveredDevice device, String ssid) async {
+    final payload =
+        utf8.encode(jsonEncode({'op': 'del', 'ssid': ssid}));
+    final text = await _withWifiChr(
+      device,
+      (chr) => _writeAndRead(chr, payload),
+    );
+    if (text == 'ERR:NOTFOUND') throw Exception('Esa red no está guardada');
+    if (text.startsWith('ERR')) {
+      throw Exception('El nodo rechazó la eliminación ($text)');
     }
   }
 

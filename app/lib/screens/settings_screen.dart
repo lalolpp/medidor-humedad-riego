@@ -415,8 +415,10 @@ class _NodeWifiSheetState extends State<_NodeWifiSheet> {
 
   bool _scanning = false;
   bool _sending = false;
+  bool _loadingSaved = false;
   List<DiscoveredDevice> _devices = [];
   DiscoveredDevice? _selected;
+  List<String> _savedSsids = [];
   List<CloudDevice> _cloudDevices = [];
   String? _selectedCloudId;
 
@@ -469,6 +471,44 @@ class _NodeWifiSheetState extends State<_NodeWifiSheet> {
     }
   }
 
+  Future<void> _loadSaved(DiscoveredDevice device) async {
+    setState(() => _loadingSaved = true);
+    try {
+      final nets = await _ble.readSavedWifiNetworks(device);
+      debugPrint('[WIFI-CFG] redes guardadas en nodo: $nets');
+      if (!mounted) return;
+      setState(() => _savedSsids = nets);
+    } catch (e) {
+      debugPrint('[WIFI-CFG] error leyendo redes guardadas: $e');
+      if (!mounted) return;
+      setState(() => _savedSsids = []);
+    } finally {
+      if (mounted) setState(() => _loadingSaved = false);
+    }
+  }
+
+  Future<void> _deleteSaved(String ssid) async {
+    final device = _selected;
+    if (device == null || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await _ble.deleteWifiNetwork(device, ssid);
+      await _loadSaved(device);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Red "$ssid" eliminada del nodo')),
+      );
+    } catch (e) {
+      debugPrint('[WIFI-CFG] error eliminando red: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   Future<void> _send() async {
     final device = _selected;
     final ssid = _ssidCtrl.text.trim();
@@ -481,12 +521,16 @@ class _NodeWifiSheetState extends State<_NodeWifiSheet> {
         _passCtrl.text,
         cloudId: _selectedCloudId,
       );
+      _ssidCtrl.clear();
+      _passCtrl.clear();
+      await _loadSaved(device);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      setState(() => _sending = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'WiFi "$ssid" guardado en el nodo. Se conectará en su próximo ciclo.'),
+              'WiFi "$ssid" guardada en el nodo (${_savedSsids.length}/5). '
+              'Se conectará en su próximo ciclo.'),
         ),
       );
     } catch (e) {
@@ -576,11 +620,51 @@ class _NodeWifiSheetState extends State<_NodeWifiSheet> {
                               fontSize: 11, color: kText2)),
                       trailing:
                           sel ? Icon(Icons.check_circle, color: kGreen, size: 20) : null,
-                      onTap: () => setState(() => _selected = d),
+                      onTap: () {
+                        setState(() {
+                          _selected = d;
+                          _savedSsids = [];
+                        });
+                        _loadSaved(d);
+                      },
                     );
                   },
                 ),
               ),
+            if (_selected != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.storage, color: kText2, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    _loadingSaved
+                        ? 'Leyendo redes del nodo…'
+                        : 'Redes guardadas (${_savedSsids.length}/5)',
+                    style: const TextStyle(fontSize: 12, color: kText2),
+                  ),
+                ],
+              ),
+              if (!_loadingSaved && _savedSsids.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final s in _savedSsids)
+                        InputChip(
+                          label: Text(s,
+                              style: const TextStyle(fontSize: 12, color: kText)),
+                          backgroundColor: kCard,
+                          side: const BorderSide(color: kBorder),
+                          onDeleted: _sending ? null : () => _deleteSaved(s),
+                          deleteIconColor: kText2,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
             const SizedBox(height: 8),
             TextFormField(
               controller: _ssidCtrl,

@@ -15,8 +15,11 @@
 #define DEFAULT_BATTERY_CAPACITY_MAH 2500
 #define DEFAULT_DEVICE_ID "dev0001"
 
+// Máximo de redes WiFi recordadas en NVS (multi-WiFi: casa, oficina, …).
+#define MAX_WIFI_NETWORKS 5
+
 // Versión del firmware, comparada con otaVersion remota para decidir OTA.
-#define FIRMWARE_VERSION "1.3.0"
+#define FIRMWARE_VERSION "1.4.0"
 
 #define SLEEP_CURRENT_MAH_PER_DAY 0.7f
 #define ACTIVE_MAH_PER_CYCLE 2.1f
@@ -41,6 +44,13 @@
 #define BLE_ADV_WINDOW_MS 30000
 #define BLE_KEEP_ALIVE_MS 60000
 
+// Modo banco/pruebas: el nodo no entra en deep sleep, mantiene BLE anunciado
+// y repite el ciclo de nube cada samplingIntervalMin (sin martillar Firebase).
+// Se activa compilando el entorno esp32dev_ota_debug; NO usar en terreno.
+#ifndef DEBUG_ALWAYS_ON
+#define DEBUG_ALWAYS_ON 0
+#endif
+
 // Válvula/relé de riego accionada por el comando `valveState` de la app
 // (devices/{id}/config/current). Con VALVE_KEEP_AWAKE=1, mientras el comando
 // sea "ON" el nodo NO entra en deep sleep y mantiene el relé energizado
@@ -56,6 +66,4 @@
 // Nivel mínimo de batería (0.0–1.0) para accionar la válvula. Si la batería
 // está por debajo de este umbral, el nodo ignora el comando ON y duerme para
 // proteger la alimentación.
-// ⚠️ PRUEBA EN BANCO: 0.0 desactiva el seguro (no hay batería conectada).
-// RESTAURAR A 0.10 antes de usar en terreno con batería real.
-#define VALVE_MIN_BATTERY 0.0
+#define VALVE_MIN_BATTERY 0.10

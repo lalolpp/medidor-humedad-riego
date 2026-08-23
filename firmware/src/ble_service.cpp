@@ -26,6 +26,7 @@ static BLECharacteristic *histNextChr = nullptr;
 static BLECharacteristic *wifiChr = nullptr;
 
 static bool clientConnected = false;
+static bool bleStarted = false;
 static size_t histCursor = 0;
 static SensorReading latest = {};
 static char autonomyBuf[32];
@@ -65,34 +66,69 @@ class IntervalCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-// Recibe credenciales WiFi como JSON {"ssid":"...","pass":"..."} y las guarda.
-// Responde "OK" o "ERR:<motivo>" para que la app lea el resultado.
+// Buzón WiFi multi-red. Comandos JSON por escritura:
+//   {"op":"add","ssid":"…","pass":"…"}   agrega/actualiza una red
+//   {"op":"del","ssid":"…"}              elimina una red guardada
+//   {"id":"demo-001", …}                 (opcional, en cualquier comando) fija el ID de nube
+// Sin "op" se interpreta como "add" (compatibilidad con app antigua).
+// Respuesta: "OK" o "ERR:<motivo>".
+// Lectura del caracter: devuelve los SSIDs guardados (sin contraseñas).
 class WifiCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *chr) override {
     String value = String(chr->getValue().c_str());
-    Serial.printf("[BLE] Config WiFi recibida (%u bytes)\n", value.length());
+    Serial.printf("[BLE] comando WiFi recibido (%u bytes)\n", value.length());
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, value);
-    if (err) {
+    if (deserializeJson(doc, value)) {
       chr->setValue("ERR:json");
       return;
     }
+    const char *op = doc["op"] | "add";
+    const char *id = doc["id"] | "";
+    if (id[0] != '\0' && !settingsSetDeviceId(id)) {
+      chr->setValue("ERR:id");
+      return;
+    }
+
+    if (strcmp(op, "del") == 0 || strcmp(op, "remove") == 0) {
+      const char *ssid = doc["ssid"] | "";
+      chr->setValue(wifiRemove(ssid) ? "OK" : "ERR:notfound");
+      return;
+    }
+
+    // add (por defecto)
     const char *ssid = doc["ssid"] | "";
     const char *pass = doc["pass"] | "";
     if (ssid[0] == '\0') {
       chr->setValue("ERR:ssid");
       return;
     }
-    if (!settingsSetWifi(ssid, pass)) {
-      chr->setValue("ERR:len");
-      return;
+    switch (wifiAdd(ssid, pass)) {
+      case WifiAddResult::Ok:
+        chr->setValue("OK");
+        break;
+      case WifiAddResult::Full:
+        chr->setValue("ERR:full");
+        break;
+      default:
+        chr->setValue("ERR:len");
+        break;
     }
-    const char *id = doc["id"] | "";
-    if (id[0] != '\0' && !settingsSetDeviceId(id)) {
-      chr->setValue("ERR:id");
-      return;
+  }
+
+  void onRead(BLECharacteristic *chr) override {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    const int n = wifiCount();
+    for (int i = 0; i < n; i++) {
+      char ssid[33] = {0};
+      if (wifiGet(i, ssid, sizeof(ssid), nullptr, 0)) {
+        arr.add(String(ssid));
+      }
     }
-    chr->setValue("OK");
+    char buf[512];
+    serializeJson(doc, buf, sizeof(buf));
+    Serial.printf("[BLE] lista WiFi enviada: %s\n", buf);
+    chr->setValue((uint8_t *)buf, strlen(buf));
   }
 };
 
@@ -112,6 +148,7 @@ class HistNextCallbacks : public BLECharacteristicCallbacks {
 
 void bleInit() {
   BLEDevice::init(BLE_DEVICE_NAME);
+  bleStarted = true;
   BLEServer *server = BLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
 
@@ -145,6 +182,24 @@ void bleInit() {
 
 bool bleClientConnected() {
   return clientConnected;
+}
+
+// Detiene y libera el stack BLE para que el ciclo de nube (WiFi + TLS) tenga
+// toda la RAM disponible. Si hay un cliente conectado, no hace nada.
+void bleDeinit() {
+  if (clientConnected || !bleStarted) return;
+  BLEDevice::stopAdvertising();
+  BLEDevice::deinit(true);
+  intervalChr = nullptr;
+  autonomyChr = nullptr;
+  liveChr = nullptr;
+  batteryChr = nullptr;
+  histCountChr = nullptr;
+  histNextChr = nullptr;
+  wifiChr = nullptr;
+  clientConnected = false;
+  bleStarted = false;
+  Serial.println("[BLE] detenido (RAM liberada para ciclo de nube)");
 }
 
 void bleProcess() {
