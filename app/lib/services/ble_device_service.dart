@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:medidor_humedad/models/device.dart';
 import 'package:medidor_humedad/models/reading.dart';
@@ -89,8 +90,14 @@ class BleDeviceService implements DeviceService {
     final dev = _found[device.id] ??
         _putIfAbsent(BluetoothDevice.fromId(device.id));
     try {
-      await dev.connect(license: License.nonprofit);
+      debugPrint('[WIFI-CFG] conectando a ${device.name} (${device.id})…');
+      await dev.connect(
+        license: License.nonprofit,
+        timeout: const Duration(seconds: 15),
+      );
+      debugPrint('[WIFI-CFG] conectado, descubriendo servicios…');
       await dev.discoverServices();
+      debugPrint('[WIFI-CFG] ${dev.servicesList.length} servicios');
 
       BluetoothCharacteristic? wifiChr;
       for (final service in dev.servicesList) {
@@ -104,15 +111,26 @@ class BleDeviceService implements DeviceService {
             'Este nodo no soporta configuración WiFi (actualiza su firmware)');
       }
 
-      await wifiChr.write(
-        utf8.encode(jsonEncode({
-          'ssid': ssid,
-          'pass': password,
-          if (cloudId != null && cloudId.isNotEmpty) 'id': cloudId,
-        })),
-      );
-      final resp = await wifiChr.read();
-      final text = utf8.decode(resp, allowMalformed: true).trim().toUpperCase();
+      final payload = utf8.encode(jsonEncode({
+        'ssid': ssid,
+        'pass': password,
+        if (cloudId != null && cloudId.isNotEmpty) 'id': cloudId,
+      }));
+      debugPrint('[WIFI-CFG] payload: ssid="$ssid" id="${cloudId ?? '-'}" '
+          '(${payload.length} bytes)');
+      debugPrint(
+          '[WIFI-CFG] escribiendo ${payload.length} bytes en $kUuidWifi');
+      await wifiChr.write(payload, timeout: 10);
+      debugPrint('[WIFI-CFG] escrito OK, leyendo respuesta…');
+      String text = 'OK';
+      try {
+        final resp = await wifiChr.read(timeout: 5);
+        text =
+            utf8.decode(resp, allowMalformed: true).trim().toUpperCase();
+        debugPrint('[WIFI-CFG] respuesta del nodo: $text');
+      } catch (e) {
+        debugPrint('[WIFI-CFG] sin respuesta legible ($e); asumiendo guardado');
+      }
       if (text.startsWith('ERR')) {
         throw Exception(switch (text) {
           'ERR:JSON' => 'El nodo no entendió los datos',

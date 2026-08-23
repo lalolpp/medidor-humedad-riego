@@ -129,7 +129,7 @@ void bleInit() {
   histNextChr = service->createCharacteristic(UUID_CHR_HIST_NEXT, BLECharacteristic::PROPERTY_READ);
   histNextChr->setCallbacks(new HistNextCallbacks());
 
-  wifiChr = service->createCharacteristic(UUID_CHR_WIFI, BLECharacteristic::PROPERTY_WRITE);
+  wifiChr = service->createCharacteristic(UUID_CHR_WIFI, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
   wifiChr->setCallbacks(new WifiCallbacks());
 
   service->start();

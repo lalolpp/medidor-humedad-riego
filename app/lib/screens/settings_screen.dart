@@ -429,12 +429,17 @@ class _NodeWifiSheetState extends State<_NodeWifiSheet> {
 
   Future<void> _loadCloudDevices() async {
     final uid = AuthService.instance.currentUser?.uid;
+    debugPrint('[WIFI-CFG] cargando dispositivos nube (uid=$uid)…');
     if (uid == null) return;
     try {
       final devices = await CloudService.instance.myDevices(uid);
+      debugPrint('[WIFI-CFG] ${devices.length} dispositivos nube: '
+          '${devices.map((d) => '${d.name}=${d.deviceId}').join(', ')}');
       if (!mounted) return;
       setState(() => _cloudDevices = devices);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[WIFI-CFG] error cargando dispositivos nube: $e');
+    }
   }
 
   @override
@@ -485,10 +490,14 @@ class _NodeWifiSheetState extends State<_NodeWifiSheet> {
         ),
       );
     } catch (e) {
+      debugPrint('[WIFI-CFG] error: $e');
       if (!mounted) return;
       setState(() => _sending = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo configurar: $e')),
+        SnackBar(
+          content: Text('No se pudo configurar: $e'),
+          duration: const Duration(seconds: 6),
+        ),
       );
     }
   }

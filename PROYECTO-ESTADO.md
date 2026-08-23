@@ -32,6 +32,40 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   e ID desde la app (Ajustes → Configurar WiFi del nodo).
 - APK debug instalada en celu (`cl.riego.medidor_humedad`, adb `-s 101aa0c2`) con todo lo anterior.
 
+## Sesión 2026-08-22 (tarde) — Config WiFi desde la app FUNCIONAL ✅
+
+**Ciclo completo verificado: nodo → WiFi → Firebase → app.**
+
+- **Configurar WiFi por BLE funciona de punta a punta**: Ajustes → Configurar WiFi
+  del nodo → escanear → "MedidorHumedad" → SSID/pass → vincular dispositivo nube →
+  Enviar. Serial confirma `[BLE] Config WiFi recibida` → `[WIFI] Credenciales
+  guardadas` → `[NVS] deviceId`. La app ahora lee `OK` del nodo.
+- **Fix clave firmware**: característica WiFi `c1a5f0d2-…` no tenía propiedad READ
+  y la app fallaba al leer la respuesta ("The READ property is not supported").
+  Ahora es `PROPERTY_WRITE | PROPERTY_READ`.
+- **Fix clave app** (`ble_device_service.dart`): timeout de conexión BLE (15 s),
+  timeouts en write/read (10 s/5 s), lectura de respuesta tolerante (si falla,
+  asume guardado porque el write llegó), logs `[WIFI-CFG]` en logcat para
+  diagnosticar cada paso.
+- **Logs de diagnóstico firmware**: `[NVS] wifiSsid/deviceId` al boot,
+  `[CLOUD] habilitado…`, `[NET] conectando a 'ssid'… / WiFi OK IP/RSSI /
+  WiFi FAIL status`. Imprescindibles para depurar sin adivinar.
+- **Vinculación correcta**: el nodo quedó con `deviceId = B0:3F:D3:5C:51:1E`
+  (su MAC), que ES el doc ID del dispositivo "MedidorHumedad" del usuario en
+  Firestore (creado por claim previo). Ojo: el desplegable lista TODOS los
+  dispositivos propios (MedidorHumedad=MAC, TY=otra MAC, Medidor Humedad
+  Demo=demo-001); elegir bien a cuál vincular.
+- **Publicación verificada en la app**: detalle de la sonda muestra última
+  medición "hace N minutos" tras reiniciar el nodo. Humedad 100% y temp -127 °C
+  son valores esperados SIN sensores conectados (pin suelto / DS18B20 ausente).
+- **Comportamiento en banco**: con USB puesto el nodo está despierto y publica
+  SOLO al arrancar (reiniciar con RST para re-publicar). Con batería publicará
+  cada intervalo al despertar.
+- **APK debug actualizada** e instalada en el celu con todos estos arreglos.
+- Nota operativa: el auto-reset USB falló varias veces al flashear; solución:
+  mantener presionado BOOT durante el `pio run -t upload` hasta que empiece a
+  escribir.
+
 ## Lo que ya está hecho ✅
 
 ### Nube (proyecto `medidor-de-humedad`, número `270536769377`)
@@ -147,13 +181,20 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
 > Detalle operativo del día a día en `NOTA-ESTADO-Y-PENDIENTES.md` (2026-08-22).
 
 ### 0. Inmediato (tras reflasheo con particiones OTA)
-- [ ] Configurar WiFi desde la app: Ajustes → Configurar WiFi del nodo → "MedidorHumedad"
-      → red de la oficina → vincular a "Medidor Humedad Demo". Verificar en serie
-      `[WIFI] Credenciales guardadas` y `[NVS] deviceId = demo-001`.
-- [ ] Probar extremo a extremo: nodo publica a demo-001 → el relé debe activarse
-      (valveState ON sigue en Firestore). Cortar con switch de Riego manual.
+- [x] Configurar WiFi desde la app — ✅ hecho y verificado (ver sesión de la tarde).
+      El nodo quedó vinculado al dispositivo "MedidorHumedad" (`B0:3F:D3:5C:51:1E`).
+- [x] Riego falso en banco probado — ✅ relé acciona con `valveState=ON` desde
+      "Riego manual" de la app y el nuevo botón por sector. Se detecta OFF en ≤60 s.
+      ⚠️ **PENDIENTE CRÍTICO**: `VALVE_MIN_BATTERY` quedó en `0.0` para poder probar
+      sin batería. RESTAURAR A `0.10` en `config.h` antes de usar con batería real.
 - [ ] Recompilar y desplegar: APK release + Windows release + release v1.0 GitHub
       (`lalolpp/medidor-humedad-apk`, `--clobber`) + actualizar pendrive `D:\medidor-humedad-windows.zip`.
+      Nota: build Windows falla por rutas >260 car.; usar junction corta (`C:\mh`) ya creada.
+- [x] Incidente de cuota Firestore (2026-08-22): el nodo crash-loopiaba durante el
+      riego (BLE+TLS agotaban RAM) republicando lecturas cada ~100 s, y la app
+      cargaba hasta 3000 lecturas/dispositivo por refresh. Fixes: BLE omitido
+      mientras riega (`main.cpp`), historial limitado a 600/1000 puntos, workflow
+      FCM desactivado (solo manual). Vigilar uso en consola los próximos días.
 
 ### 1. Enlace de cobertura (RSSI en nube) — ✅ hecho por OpenCode
 - [x] Mostrar la última RSSI (de readings) en las tarjetas del dashboard y detalle de sonda,

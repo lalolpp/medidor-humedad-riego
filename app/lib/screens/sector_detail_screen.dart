@@ -29,6 +29,17 @@ class SectorDetailScreen extends StatefulWidget {
 class _SectorDetailScreenState extends State<SectorDetailScreen> {
   late Future<List<Reading>> _comparisonFuture;
   int _rangeHours = 24;
+  bool _sendingValve = false;
+
+  /// Override local tras enviar un comando (la lista de dispositivos viene del
+  /// widget padre y no se refresca sola); null = usar el estado en la nube.
+  bool? _valveOverride;
+
+  /// true si alguna sonda del sector está regando según la nube.
+  bool get _cloudIrrigating =>
+      widget.devices.any((d) => d.valveState == 'ON');
+
+  bool get _irrigating => _valveOverride ?? _cloudIrrigating;
 
   /// Umbral de riego: el propio del sector si está definido, si no el del cultivo.
   double? get _threshold {
@@ -55,7 +66,7 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
     final results = await Future.wait([
       for (final d in widget.devices)
         CloudService.instance.readingsFor(d.deviceId,
-            from: since, limit: 4000),
+            from: since, limit: 1000),
     ]);
     return results.expand((r) => r).toList();
   }
@@ -66,6 +77,145 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
       _rangeHours = hours;
       _comparisonFuture = _loadComparison();
     });
+  }
+
+  /// Envía el comando de válvula a TODAS las sondas del sector.
+  Future<void> _setSectorIrrigation(bool on) async {
+    if (widget.devices.isEmpty || _sendingValve) return;
+    if (on) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.water_drop, color: Colors.blue, size: 40),
+          title: Text('Iniciar riego · ${widget.sector.name}'),
+          content: Text(
+            'Se enviará el comando de apertura a ${widget.devices.length} '
+            '${widget.devices.length == 1 ? 'sonda' : 'sondas'}. El nodo la '
+            'aplicará en su próximo ciclo.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Regar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() => _sendingValve = true);
+    try {
+      for (final d in widget.devices) {
+        await CloudService.instance
+            .setValveCommand(d.deviceId, on ? 'ON' : 'OFF', 'manual');
+      }
+      if (!mounted) return;
+      setState(() => _valveOverride = on);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(on
+              ? 'Riego iniciado en ${widget.sector.name}'
+              : 'Riego detenido en ${widget.sector.name}'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingValve = false);
+    }
+  }
+
+  Widget _irrigationControlCard() {
+    final irrigating = _irrigating;
+    final hasDevices = widget.devices.isNotEmpty;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.water_drop,
+                  size: 18,
+                  color: irrigating ? Colors.green : Colors.grey,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Riego del sector',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Text(
+                  _sendingValve
+                      ? 'Enviando…'
+                      : irrigating
+                          ? 'Regando'
+                          : 'Detenido',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: irrigating ? Colors.green : Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor:
+                          irrigating ? Colors.green.shade700 : null,
+                      foregroundColor: irrigating ? Colors.white : null,
+                    ),
+                    onPressed: hasDevices && !_sendingValve && !irrigating
+                        ? () => _setSectorIrrigation(true)
+                        : null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Iniciar riego'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor:
+                          irrigating ? Colors.red.shade700 : null,
+                      foregroundColor: irrigating ? Colors.white : null,
+                    ),
+                    onPressed: hasDevices && !_sendingValve && irrigating
+                        ? () => _setSectorIrrigation(false)
+                        : null,
+                    icon: const Icon(Icons.stop),
+                    label: const Text('Detener'),
+                  ),
+                ),
+              ],
+            ),
+            if (!hasDevices)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Asigna una sonda al sector para poder regar.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -81,6 +231,8 @@ class _SectorDetailScreenState extends State<SectorDetailScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _infoCard(s),
+          const SizedBox(height: 16),
+          _irrigationControlCard(),
           if (widget.crop != null) ...[
             const SizedBox(height: 16),
             _cropCard(widget.crop!),

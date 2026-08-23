@@ -22,6 +22,8 @@ void setup() {
   Serial.begin(115200);
   sensorInit();
   settingsLoad();
+  Serial.printf("[NVS] wifiSsid='%s' deviceId='%s'\n", settings().wifiSsid,
+                settings().deviceId);
   readingsInit();
   valveInit();
 
@@ -30,6 +32,7 @@ void setup() {
   readingsAppend(r, settings().samplingIntervalMin);
 
   if (settings().cloudEnabled) {
+    Serial.println("[CLOUD] habilitado, intentando ciclo de publicación");
     if (cloudLogin()) {
       // Aplica el comando de riego antes de publicar: si la app ordenó abrir
       // la válvula, este ciclo lo deja accionado (y el loop lo mantiene).
@@ -71,9 +74,21 @@ void setup() {
     }
   }
 
-  bleInit();
-  bleSetLatestReading(r);
-  bleWindowEnd = millis() + BLE_ADV_WINDOW_MS;
+#if VALVE_KEEP_AWAKE
+  if (valveActive()) {
+    // Mientras riega NO se inicia BLE: el stack BLE junto a WiFi+TLS agotan
+    // la RAM (fallas "ssl_client ECP - Memory allocation failed") y el nodo
+    // se reinicia en bucle, republicando lecturas y quemando la cuota diaria.
+    // La nube se sigue re-chequeando cada VALVE_RECHECK_MS desde loop().
+    Serial.println("[BLE] omitido: válvula activa (riego en curso)");
+    bleWindowEnd = millis() + VALVE_RECHECK_MS;
+  } else
+#endif
+  {
+    bleInit();
+    bleSetLatestReading(r);
+    bleWindowEnd = millis() + BLE_ADV_WINDOW_MS;
+  }
 }
 
 void loop() {
@@ -105,15 +120,18 @@ void loop() {
   }
 #endif
 
-  bool usbPower = lastBatteryVoltage >= 4.15f;
-  if (usbPower && millis() >= bleWindowEnd) {
+  // Modo banco/pruebas: USB puesto. Se detecta como batería llena (≥4,15 V,
+  // cargando por USB) o sin batería conectada (≈0 V). Solo con una batería
+  // real en rango entra el ciclo normal de deep sleep.
+  bool benchPower = lastBatteryVoltage >= 4.15f || lastBatteryVoltage < 0.5f;
+  if (benchPower && millis() >= bleWindowEnd) {
     bleWindowEnd = millis() + BLE_KEEP_ALIVE_MS;
   }
   if (millis() >= bleWindowEnd
 #if VALVE_KEEP_AWAKE
       && !valveActive()
 #endif
-      && !usbPower
+      && !benchPower
   ) {
     Serial.printf("[PWR] Batería %.2fV, entrando deep sleep\n", lastBatteryVoltage);
     esp_deep_sleep((uint64_t)settings().samplingIntervalMin * 60ULL * 1000000ULL);

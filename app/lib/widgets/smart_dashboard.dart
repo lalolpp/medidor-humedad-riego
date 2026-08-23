@@ -346,7 +346,9 @@ class _SmartDashboardState extends State<SmartDashboard> {
     final perDevice = await Future.wait([
       for (final d in all)
         CloudService.instance
-            .readingsFor(d.deviceId, from: from, to: now, limit: 3000)
+            // 600 puntos bastan para el promedio diario (30 días × ~20/día);
+            // antes eran 3000 por dispositivo en cada carga y quemaba cuota.
+            .readingsFor(d.deviceId, from: from, to: now, limit: 600)
             .then<List<Reading>>((list) => list)
             .catchError((_) => <Reading>[]),
     ]);

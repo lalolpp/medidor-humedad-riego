@@ -56,4 +56,6 @@
 // Nivel mínimo de batería (0.0–1.0) para accionar la válvula. Si la batería
 // está por debajo de este umbral, el nodo ignora el comando ON y duerme para
 // proteger la alimentación.
-#define VALVE_MIN_BATTERY 0.10
+// ⚠️ PRUEBA EN BANCO: 0.0 desactiva el seguro (no hay batería conectada).
+// RESTAURAR A 0.10 antes de usar en terreno con batería real.
+#define VALVE_MIN_BATTERY 0.0

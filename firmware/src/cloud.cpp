@@ -62,12 +62,23 @@ static String idToken() {
 
 static bool connectWiFi() {
   Settings &s = settings();
-  if (s.wifiSsid[0] == '\0') return false;
+  if (s.wifiSsid[0] == '\0') {
+    Serial.println("[NET] sin credenciales WiFi");
+    return false;
+  }
+  Serial.printf("[NET] conectando a '%s'…\n", s.wifiSsid);
   WiFi.mode(WIFI_STA);
   WiFi.begin(s.wifiSsid, s.wifiPass);
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
     delay(100);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[NET] WiFi OK, IP=%s RSSI=%d\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  } else {
+    Serial.printf("[NET] WiFi FAIL (status=%d tras %lus)\n", WiFi.status(),
+                  (unsigned long)((millis() - start) / 1000));
   }
   return WiFi.status() == WL_CONNECTED;
 }

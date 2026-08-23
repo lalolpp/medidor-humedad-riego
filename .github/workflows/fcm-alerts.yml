@@ -1,9 +1,11 @@
 name: FCM Alertas de riego
 
+# ⚠️ DESACTIVADO (2026-08-22): las ejecuciones automáticas cada 30 min leían
+# todo el árbol del campo y consumían cuota diaria de Firestore. Las alertas
+# push ya están verificadas. Para reactivar, descomentar el bloque `schedule`.
 on:
-  schedule:
-    # Cada 30 minutos (UTC). GitHub Actions solo garantiza intervalos >= 5 min.
-    - cron: '*/30 * * * *'
+  # schedule:
+  #   - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
