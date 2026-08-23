@@ -66,6 +66,44 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
   mantener presionado BOOT durante el `pio run -t upload` hasta que empiece a
   escribir.
 
+## Sesión 2026-08-22 (noche) — Riego remoto ON/OFF verificado ✅
+
+- **Riego falso en banco probado de punta a punta**: comando desde la app →
+  Firestore → nodo lee `config/current` → relé GPIO 26 acciona (`[VALVE] ON
+  (riego)` en serial) → al apagar, el relé corta en ≤60 s. ON/OFF confirmado.
+- **Botones Iniciar/Detener riego por sector** agregados al detalle de cada
+  sector (`sector_detail_screen.dart`): comandan todas las sondas del sector,
+  con diálogo de confirmación y estado "Regando/Detenido" en vivo. Requieren
+  tener la sonda **asignada al sector** (las actuales están "sin sectores").
+- **Fix switch riego manual**: leía `automationStatus` del doc del dispositivo,
+  pero el toggle manual solo escribía `config/current` → mostraba apagado con
+  el nodo regando. Ahora `_refreshDevice()` usa `readValveCommand()`
+  (config/current) como fuente de verdad, y el toggle manual también
+  sincroniza `automationStatus`.
+- **Incidente de cuota Firestore resuelto**: causas (nodo crash-loopiando
+  durante riego por agotamiento de RAM BLE+TLS; app cargando 3000/4000
+  lecturas por dispositivo por refresh) corregidas. Workflow FCM desactivado
+  (solo manual). Consumo normal estimado: <2% de la cuota diaria.
+
+## Plan para mañana (2026-08-23)
+
+> La cuota diaria de Firestore se renueva ~03:00-04:00 AM Chile.
+
+- [ ] Verificar que el dashboard carga datos normalmente (cuota renovada).
+- [ ] Asignar las sondas ("MedidorHumedad", "TY") a sectores del campo para
+      poder usar los botones de riego por sector.
+- [ ] Probar botones Iniciar/Detener por sector de punta a punta.
+- [ ] ⚠️ **RESTAURAR `VALVE_MIN_BATTERY = 0.10`** en `firmware/include/config.h`
+      (hoy está en `0.0` solo para el banco sin batería) y reflashear.
+- [ ] Revisar uso de cuota en consola Firebase para confirmar consumo normal.
+- [ ] Build Windows con junction corta `C:\mh` (falla por rutas >260 car.
+      desde la ruta original): `flutter clean && flutter pub get && flutter
+      build windows --release`, luego empaquetar zip.
+- [ ] Releases finales: APK release + Windows zip + release v1.0 en GitHub
+      (`lalolpp/medidor-humedad-apk`) + actualizar pendrive.
+- [ ] Cuando lleguen los sensores capacitivos: conectarlos y calibrar
+      (punto 7 del backlog).
+
 ## Lo que ya está hecho ✅
 
 ### Nube (proyecto `medidor-de-humedad`, número `270536769377`)
