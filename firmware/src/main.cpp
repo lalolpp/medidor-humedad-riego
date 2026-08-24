@@ -32,9 +32,16 @@ static void runCloudCycle(SensorReading &r) {
   // Aplica el comando de riego antes de publicar: si la app ordenó abrir
   // la válvula, este ciclo lo deja accionado (y el loop lo mantiene).
   // Safety: no abre válvula si la batería está por debajo del mínimo.
+  // En modo banco (DEBUG_ALWAYS_ON) no hay batería real y el seguro se omite.
   String valveState;
+#if DEBUG_ALWAYS_ON
+  const bool batteryLowBlock = false;
+#else
+  const bool batteryLowBlock =
+      valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY;
+#endif
   if (cloudFetchValve(valveState)) {
-    if (valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY) {
+    if (batteryLowBlock) {
       Serial.printf("[VALVE] Batería baja (%.0f%%), ignorando comando ON\n",
                     r.batteryLevel01 * 100);
     } else {
