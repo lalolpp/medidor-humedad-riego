@@ -89,18 +89,33 @@ dashboard con el diseño real del campo (8 sectores de riego) y APK release gene
 
 > La cuota diaria de Firestore se renueva ~03:00-04:00 AM Chile.
 
+### Sesión de revisión nocturna (extra)
+- Llegó `e59da1c` de la otra PC: **multi-WiFi** (5 redes en NVS, conecta por
+  mejor señal) + entorno `esp32dev_ota_debug` (modo banco sin deep sleep,
+  `DEBUG_ALWAYS_ON=1`). `VALVE_MIN_BATTERY` ya restaurado a 0.10 ✅.
+- Fix propio `a6df4b9`: el seguro de batería bloquearía el ON en banco sin
+  batería; ahora el modo banco lo omite explícitamente. Ambos entornos
+  (`esp32dev_ota`, `esp32dev_ota_debug`) compilan OK.
+- ⚠️ El nodo tiene flasheado firmware **viejo** (WiFi simple, seguro 0.0):
+  reflashear antes de seguir probando en banco.
+
+### Tareas
+- [ ] Reflashear el nodo con `pio run -t upload -e esp32dev_ota_debug
+      --upload-port COM3` (mantener BOOT presionado) y verificar multi-WiFi:
+      configurar 2+ redes por BLE, confirmar que elige la de mejor señal.
 - [ ] Verificar que el dashboard carga datos normalmente (cuota renovada).
 - [ ] Asignar las sondas ("MedidorHumedad", "TY") a sectores del campo para
       poder usar los botones de riego por sector.
-- [ ] Probar botones Iniciar/Detener por sector de punta a punta.
-- [ ] ⚠️ **RESTAURAR `VALVE_MIN_BATTERY = 0.10`** en `firmware/include/config.h`
-      (hoy está en `0.0` solo para el banco sin batería) y reflashear.
+- [ ] Probar botones Iniciar/Detener por sector de punta a punta (con el
+      relé del banco).
 - [ ] Revisar uso de cuota en consola Firebase para confirmar consumo normal.
 - [ ] Build Windows con junction corta `C:\mh` (falla por rutas >260 car.
       desde la ruta original): `flutter clean && flutter pub get && flutter
       build windows --release`, luego empaquetar zip.
 - [ ] Releases finales: APK release + Windows zip + release v1.0 en GitHub
       (`lalolpp/medidor-humedad-apk`) + actualizar pendrive.
+- [ ] Antes de terreno: compilar/flashear con `esp32dev_ota` (NO debug) y
+      verificar que el seguro de batería queda activo.
 - [ ] Cuando lleguen los sensores capacitivos: conectarlos y calibrar
       (punto 7 del backlog).
 
