@@ -62,9 +62,19 @@ mantencion-lineas). Pegar **todo el contenido** de `firestore.rules` en
 
 Las reglas usan el campo **`rol`** (`user` / `admin`) y cubren:
 - `users/{userId}`: alta de cuenta propia con rol `user`; el usuario NO puede auto-promoverse a `admin`.
-- `devices/{deviceId}`: claim por cualquier usuario autenticado; solo dueño/admin lee, actualiza o borra.
-- `devices/{deviceId}/readings/{readingId}`: lectura solo dueño/admin.
+- `devices/{deviceId}`: claim por el usuario que lo registra (`owner = uid`); solo dueño/admin/manager escribe la config (válvula) y las lecturas. **El claim no puede fijar la cuenta del nodo** (`nodeAccountEmail`), solo un admin.
+- `devices/{deviceId}/config/{id}`: aquí vive el comando de válvula; solo dueño/admin/manager escribe; el **nodo vinculado** (`nodeAccountEmail`) solo lee.
+- `devices/{deviceId}/readings/{readingId}`: crea/lee solo dueño/admin/manager o el nodo vinculado.
 - `alerts/{alertId}`: lectura autenticada; creación solo admin.
+- `commands`, `irrigationEvents`: solo dueño/admin/manager del dispositivo.
+
+> **Vínculo de cuenta del nodo (opcional, recomendado)**: para que el firmware
+> quede vinculado a sus dispositivos sin depender del dueño, cada documento
+> `devices/{deviceId}` puede llevar `nodeAccountEmail` = email de la cuenta del
+> nodo (`nodo@medidor.cl`). Es **opcional**: con las reglas actuales el nodo
+> funciona sin él (los dueños/admin/manager siguen pudiendo publicar telemetría y
+> la lectura de `config` queda abierta a usuarios autenticados). Se recomienda
+> fijarlo por el admin para dejar constancia de a qué cuenta pertenece cada nodo.
 
 Para crear tu usuario admin: regístrate en la app (queda `rol: user`) y luego en
 Firestore cambia manualmente `users/{tuUid}.rol` a `"admin"`.
@@ -90,15 +100,17 @@ Pegar en **Realtime Database → Rules** (RULES tab). Archivo fuente: `database.
 }
 ```
 
-> **Importante**: el firmware publica hoy con token legacy en la URL
-> (`?auth=FIREBASE_AUTH_TOKEN`). Ese mecanismo da acceso de administrador y
-> **salta las reglas** (está deprecado por Google). Para el prototipo hay que
-> completar `FIREBASE_AUTH_TOKEN` en `firmware/include/config.h` (RTDB →
-> Configuración del proyecto → *Database secrets*). El host ya configurado es
-> `medidor-de-humedad-default-rtdb.firebaseio.com` (si la base de datos no quedó
-> en la ubicación default, la URL cambia). A futuro se debe migrar a una
-> autenticación real (Firebase Auth para el nodo o una Cloud Function que firme
-> el ingreso). Ver pendientes en `firmware/README.md`.
+> **Importante**: el firmware autentica con **Firebase Auth** (email/contraseña de
+> la cuenta `nodo@medidor.cl`) y publica por la REST API de Firestore con un **ID
+> token** — NO usa el token legacy de RTDB. Las credenciales del nodo NO van en el
+> repo: van en `firmware/include/secrets.h` (gitignored, copia de
+> `secrets.h.template`). La contraseña de esa cuenta quedó expuesta en el historial
+> público del repo, por lo que **debe rotarse**: cambiar la contraseña en Firebase
+> Console (Authentication → Users → nodo@medidor.cl) y actualizar `secrets.h`.
+> A la vez se debe fijar `nodeAccountEmail` en cada `devices/{deviceId}` (ver
+> arriba) para que el nodo quede vinculado a sus dispositivos. Pendiente a futuro:
+> migrar a una autenticación más fuerte para el nodo (secreto por dispositivo o
+> una Cloud Function que firme el ingreso). Ver `firmware/README.md`.
 
 ## Claim de dispositivos
 

@@ -37,8 +37,22 @@
 
 #define FIREBASE_HOST "medidor-de-humedad-default-rtdb.firebaseio.com"
 #define FIREBASE_API_KEY "AIzaSyCcqtbCigQbxkKJ7zqFxbCuaygvBYTGIYw"
-#define FIREBASE_AUTH_EMAIL "nodo@medidor.cl"
-#define FIREBASE_AUTH_PASSWORD "Medidor2026Nodo"
+
+// Credenciales de la cuenta del nodo (email/password para signInWithPassword).
+// NO van hardcodeadas aquí: se cargan desde `firmware/include/secrets.h`
+// (archivo gitignored). Sin ese archivo, el firmware compila pero NO publica
+// en runtime (credenciales vacías), evitando que se fuge la cuenta otra vez.
+// Copiar `secrets.h.template` a `secrets.h` y rellenar con las credenciales
+// reales (ver "rotación" en el template).
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef FIREBASE_AUTH_EMAIL
+#define FIREBASE_AUTH_EMAIL ""
+#endif
+#ifndef FIREBASE_AUTH_PASSWORD
+#define FIREBASE_AUTH_PASSWORD ""
+#endif
 
 #define BLE_DEVICE_NAME "MedidorHumedad"
 #define BLE_ADV_WINDOW_MS 30000

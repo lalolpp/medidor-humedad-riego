@@ -27,6 +27,22 @@ firmware/
     └── ble_service.cpp
 ```
 
+## Credenciales del nodo (secrets.h)
+
+Las credenciales de la cuenta con la que el nodo publica (`nodo@medidor.cl`)
+**no van en el repo**:
+
+1. Copiar `include/secrets.h.template` a `include/secrets.h` (ya está en `.gitignore`).
+2. Rellenar con las credenciales reales. Sin el archivo, el firmware compila pero
+   **no publica** en runtime (se queda sin ID token).
+3. La contraseña quedó expuesta en el historial público del repo → **rotar** en
+   Firebase Console (Authentication → Users → nodo@medidor.cl) y actualizar
+   `secrets.h`.
+
+Además, opcionalmente, cada `devices/{deviceId}` puede llevar el campo
+`nodeAccountEmail` con el email de la cuenta del nodo (ver `docs/cloud-firebase.md`);
+es recomendable pero no obligatorio con las reglas actuales.
+
 ## Compilar y subir
 
 ```
