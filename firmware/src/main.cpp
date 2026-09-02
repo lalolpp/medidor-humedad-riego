@@ -19,6 +19,11 @@ static unsigned long valveOpenedAt = 0;
 static float lastBatteryVoltage = 0.0f;
 
 #if DEBUG_ALWAYS_ON
+// Cadencia del ciclo de nube en banco (USB): 5 s para probar el relé/riego
+// rápido. No afecta a terreno (`esp32dev_ota`), que sigue con deep sleep.
+#ifndef BENCH_CYCLE_MS
+#define BENCH_CYCLE_MS 5000UL
+#endif
 static unsigned long nextPublishAt = 0;
 #endif
 
@@ -26,23 +31,25 @@ static unsigned long nextPublishAt = 0;
 // publicación con backfill y chequeo OTA. Llamar con BLE detenido: WiFi+TLS
 // necesitan toda la RAM disponible.
 static void runCloudCycle(SensorReading &r) {
+#if DEBUG_ALWAYS_ON
+  // Modo banco (USB): pruebas por BLE, sin tocar Firebase. La nube solo se
+  // usa de nuevo al volver al firmware normal (esp32dev_ota) en terreno.
+  Serial.println("[CLOUD] omitido en modo banco (control por BLE, sin nube)");
+  return;
+#endif
   Serial.println("[CLOUD] habilitado, intentando ciclo de publicación");
   if (!cloudLogin()) return;
 
   // Aplica el comando de riego antes de publicar: si la app ordenó abrir
   // la válvula, este ciclo lo deja accionado (y el loop lo mantiene).
   // Safety: no abre válvula si la batería está por debajo del mínimo.
-  // En modo banco (DEBUG_ALWAYS_ON) no hay batería real y el seguro se omite.
   String valveState;
   if (cloudFetchValve(valveState)) {
-#if DEBUG_ALWAYS_ON
-    const bool batteryLowBlock = false;
-#else
+    const bool benchPower = r.batteryVoltage >= 4.15f || r.batteryVoltage < 0.5f;
     // Importante evaluarlo AQUÍ: valveState ya fue llenado por cloudFetchValve,
     // si no, la comparación con "" nunca bloquearía el ON con batería baja.
     const bool batteryLowBlock =
-        valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY;
-#endif
+        !benchPower && valveState == "ON" && r.batteryLevel01 < VALVE_MIN_BATTERY;
     if (batteryLowBlock) {
       Serial.printf("[VALVE] Batería baja (%.0f%%), ignorando comando ON\n",
                     r.batteryLevel01 * 100);
@@ -110,8 +117,7 @@ void setup() {
   }
 
 #if DEBUG_ALWAYS_ON
-  nextPublishAt =
-      millis() + (unsigned long)settings().samplingIntervalMin * 60000UL;
+  nextPublishAt = millis() + BENCH_CYCLE_MS;
 #endif
 }
 
@@ -122,32 +128,22 @@ void loop() {
   }
 
 #if DEBUG_ALWAYS_ON
-  // Modo banco: sin deep sleep; repite el ciclo de nube cada intervalo,
-  // deteniendo BLE durante la publicación (RAM para WiFi+TLS).
+  // Modo isla (banco, sin nube): BLE siempre anunciado sin interrupciones y
+  // válvula controlada por BLE. Solo se refresca la lectura de sensor; no hay
+  // ciclo de nube que repetir (ni WiFi que liberar), por eso no se toca BLE.
   if (millis() >= nextPublishAt) {
-    if (bleClientConnected()) {
-      nextPublishAt = millis() + 30000UL;  // espera a que la app suelte el nodo
-    } else if (valveActive()) {
-      nextPublishAt = millis() + VALVE_RECHECK_MS;
-    } else {
-      bleDeinit();
-      SensorReading r = readSensor();
-      lastBatteryVoltage = r.batteryVoltage;
-      readingsAppend(r, settings().samplingIntervalMin);
-      runCloudCycle(r);
-      bleInit();
-      bleSetLatestReading(r);
-      Serial.printf("[BENCH] ciclo listo, próximo en %u min\n",
-                    settings().samplingIntervalMin);
-      nextPublishAt =
-          millis() + (unsigned long)settings().samplingIntervalMin * 60000UL;
-    }
+    SensorReading r = readSensor();
+    lastBatteryVoltage = r.batteryVoltage;
+    readingsAppend(r, settings().samplingIntervalMin);
+    nextPublishAt = millis() + BENCH_CYCLE_MS;
   }
 #endif
 
-#if VALVE_KEEP_AWAKE
+#if VALVE_KEEP_AWAKE && !DEBUG_ALWAYS_ON
   // Mientras la válvula esté abierta el relé debe permanecer alimentado: no se
   // duerme y se re-chequea el comando remoto para detectar el "OFF".
+  // (En banco/isla no aplica: no hay nube que re-chequear; la válvula se
+  //  controla directo por BLE.)
   if (valveActive() && millis() >= bleWindowEnd) {
     // Safety: si la válvula lleva abierta más de VALVE_MAX_OPEN_MIN, cerrar.
 #if VALVE_MAX_OPEN_MIN > 0
@@ -168,9 +164,11 @@ void loop() {
   }
 #endif
 
+  #if !DEBUG_ALWAYS_ON
   // Modo banco/pruebas: USB puesto. Se detecta como batería llena (≥4,15 V,
   // cargando por USB) o sin batería conectada (≈0 V). Solo con una batería
-  // real en rango entra el ciclo normal de deep sleep.
+  // real en rango entra el ciclo normal de deep sleep. En banco/isla no se
+  // duerme nunca: el BLE debe quedar siempre disponible.
   bool benchPower = lastBatteryVoltage >= 4.15f || lastBatteryVoltage < 0.5f;
   if (benchPower && millis() >= bleWindowEnd) {
     bleWindowEnd = millis() + BLE_KEEP_ALIVE_MS;
@@ -185,4 +183,5 @@ void loop() {
     esp_deep_sleep((uint64_t)settings().samplingIntervalMin * 60ULL * 1000000ULL);
   }
   delay(10);
+#endif
 }

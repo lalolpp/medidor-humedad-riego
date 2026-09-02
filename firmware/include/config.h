@@ -72,7 +72,11 @@
 // nodo duerme normalmente entre ciclos aplicando el comando en cada despertar.
 #define VALVE_KEEP_AWAKE 1
 // Mientras riega, re-chequea la nube cada este intervalo para detectar "OFF".
+// En banco (`esp32dev_ota_debug`) se reduce a 5 s vía build flags para poder
+// probar el relé rápido; en terreno queda 60 s (ahorro de batería).
+#ifndef VALVE_RECHECK_MS
 #define VALVE_RECHECK_MS 60000
+#endif
 // Tiempo máximo que la válvula puede estar abierta (minutos). Si se excede,
 // el nodo cierra la válvula automáticamente como protección contra inundación.
 // 0 = sin límite (no recomendado en producción).

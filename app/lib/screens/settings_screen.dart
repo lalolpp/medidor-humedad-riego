@@ -62,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => const _NodeWifiSheet(),
+      builder: (_) => const NodeWifiSheet(),
     );
   }
 
@@ -401,14 +401,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _NodeWifiSheet extends StatefulWidget {
-  const _NodeWifiSheet();
+class NodeWifiSheet extends StatefulWidget {
+  const NodeWifiSheet({super.key});
 
   @override
-  State<_NodeWifiSheet> createState() => _NodeWifiSheetState();
+  State<NodeWifiSheet> createState() => _NodeWifiSheetState();
 }
 
-class _NodeWifiSheetState extends State<_NodeWifiSheet> {
+class _NodeWifiSheetState extends State<NodeWifiSheet> {
   final _ble = BleDeviceService();
   final _ssidCtrl = TextEditingController();
   final _passCtrl = TextEditingController();

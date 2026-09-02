@@ -16,6 +16,8 @@ const String kUuidBattery = '5a5b6c7d-8e9f-4a5b-8c7d-9e0f1a2b3c4d';
 const String kUuidHistCount = '7d7e8f90-1234-4a5b-9c8d-1e2f3a4b5c6d';
 const String kUuidHistNext = '8e8f9a0b-1234-4a5b-8c7d-9e0f1a2b3c4d';
 const String kUuidWifi = 'c1a5f0d2-77e8-4b39-9a44-52f10de91b63';
+const String kUuidStatus = '6f3a1f5d-8c1e-4e0b-9a2d-3b4c5d6e7f01';
+const String kUuidValve = 'a1b2c3d4-5e6f-4a0b-9c8d-7e6f5a4b3c2d';
 
 class BleDeviceService implements DeviceService {
   final Map<String, BluetoothDevice> _found = {};
@@ -77,6 +79,32 @@ class BleDeviceService implements DeviceService {
     await dev.connect(license: License.nonprofit);
     await dev.discoverServices();
     return BleNodoConnection(dev);
+  }
+
+  /// Envía el comando de válvula directo a un nodo por su MAC (sin escanear).
+  /// Devuelve false si no se pudo (BT apagado, nodo fuera de alcance, etc.).
+  Future<bool> sendValveByMac(String mac, bool on) async {
+    if (kIsWeb) return false;
+    try {
+      await FlutterBluePlus.turnOn();
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) return false;
+      final dev = BluetoothDevice.fromId(mac);
+      await dev.connect(
+        timeout: const Duration(seconds: 8),
+        license: License.nonprofit,
+      );
+      await dev.discoverServices();
+      final conn = BleNodoConnection(dev);
+      try {
+        await conn.setValve(on);
+        return true;
+      } finally {
+        await conn.close();
+      }
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Conecta al nodo, localiza el característico WiFi y ejecuta [action];
@@ -199,6 +227,8 @@ class BleNodoConnection implements NodoConnection {
   BluetoothCharacteristic? _batteryChr;
   BluetoothCharacteristic? _histCountChr;
   BluetoothCharacteristic? _histNextChr;
+  BluetoothCharacteristic? _statusChr;
+  BluetoothCharacteristic? _valveChr;
 
   final _controller = StreamController<Reading?>.broadcast();
   StreamSubscription? _liveSub;
@@ -229,6 +259,10 @@ class BleNodoConnection implements NodoConnection {
             _histCountChr = characteristic;
           case kUuidHistNext:
             _histNextChr = characteristic;
+          case kUuidStatus:
+            _statusChr = characteristic;
+          case kUuidValve:
+            _valveChr = characteristic;
         }
       }
     }
@@ -313,6 +347,48 @@ class BleNodoConnection implements NodoConnection {
       if (decoded.length < 20) break;
     }
     return readings;
+  }
+
+  @override
+  Future<ConnectionStatus?> readConnectionStatus() async {
+    final value = await _statusChr?.read();
+    if (value == null) return null;
+    final text = utf8.decode(value, allowMalformed: true).trim();
+    if (text.isEmpty) return null;
+    try {
+      final json = jsonDecode(text);
+      if (json is! Map<String, dynamic>) return null;
+      WifiLinkInfo? wifi;
+      final wifiJson = json['wifi'];
+      if (wifiJson is Map<String, dynamic>) {
+        wifi = WifiLinkInfo(
+          connected: wifiJson['connected'] == true,
+          ssid: wifiJson['ssid'] as String?,
+          ip: wifiJson['ip'] as String?,
+          rssi: (wifiJson['rssi'] as num?)?.toInt() ?? 0,
+        );
+      }
+      return ConnectionStatus(
+        bluetooth: json['bt'] == true,
+        wifi: wifi,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> setValve(bool on) async {
+    await _valveChr?.write(utf8.encode(on ? '1' : '0'), timeout: 10);
+  }
+
+  @override
+  Future<bool?> readValve() async {
+    final value = await _valveChr?.read();
+    if (value == null) return null;
+    final text = utf8.decode(value, allowMalformed: true).trim();
+    if (text.isEmpty) return null;
+    return text == '1' || text.toLowerCase() == 'on';
   }
 
   @override

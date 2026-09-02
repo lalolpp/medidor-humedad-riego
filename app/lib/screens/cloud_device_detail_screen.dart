@@ -5,6 +5,7 @@ import 'package:medidor_humedad/screens/automation_screen.dart';
 import 'package:medidor_humedad/services/app_settings.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/automation_service.dart';
+import 'package:medidor_humedad/services/ble_device_service.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/csv_export.dart';
 import 'package:medidor_humedad/services/infiltration.dart';
@@ -589,8 +590,8 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
           icon: const Icon(Icons.water_drop, color: Colors.blue, size: 40),
           title: const Text('Iniciar riego'),
           content: const Text(
-            'El nodo abrirá la válvula en su próximo ciclo. Si está '
-            'conectado por USB, presiona RST para que lo aplique de inmediato.',
+            'Se ordena al nodo por Bluetooth si está cerca; si no, '
+            'aplicará en su próximo ciclo de nube.',
           ),
           actions: [
             TextButton(
@@ -607,6 +608,8 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
       if (confirmed != true) return;
     }
     setState(() => _togglingValve = true);
+    final bleOk = await BleDeviceService()
+        .sendValveByMac(_device.deviceId, on);
     try {
       await CloudService.instance
           .setValveCommand(_device.deviceId, on ? 'ON' : 'OFF', 'manual');
@@ -621,7 +624,11 @@ class _CloudDeviceDetailScreenState extends State<CloudDeviceDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(on ? 'Comando de riego enviado' : 'Riego detenido'),
+          content: Text(
+            bleOk
+                ? (on ? 'Válvula abierta por Bluetooth' : 'Válvula cerrada por Bluetooth')
+                : (on ? 'Comando de riego enviado' : 'Riego detenido'),
+          ),
         ),
       );
       await _refreshDevice();

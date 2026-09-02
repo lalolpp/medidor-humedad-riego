@@ -1,11 +1,11 @@
 {
-    "name": "medidor_humedad",
-    "short_name": "medidor_humedad",
+    "name": "Medidor de Humedad",
+    "short_name": "Medidor Humedad",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#2E7D32",
+    "description": "Monitoreo de humedad de suelo y riego automático.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

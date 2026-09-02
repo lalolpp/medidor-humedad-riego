@@ -6,6 +6,7 @@ import 'package:medidor_humedad/models/reading.dart';
 import 'package:medidor_humedad/services/app_firebase.dart';
 import 'package:medidor_humedad/services/auth_service.dart';
 import 'package:medidor_humedad/services/autonomy.dart';
+import 'package:medidor_humedad/screens/settings_screen.dart';
 import 'package:medidor_humedad/services/cloud_service.dart';
 import 'package:medidor_humedad/services/device_service.dart';
 import 'package:medidor_humedad/services/nodo_connection.dart';
@@ -39,6 +40,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   String _autonomy = '—';
   BatteryInfo? _battery;
   int? _historyCount;
+  ConnectionStatus? _status;
+  bool? _valve;
 
   @override
   void initState() {
@@ -92,11 +95,19 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     final battery = await conn.readBattery();
     final live = await conn.readLive();
     final count = await conn.readHistoryCount();
+    ConnectionStatus? status;
+    bool? valve;
+    try {
+      status = await conn.readConnectionStatus();
+      valve = await conn.readValve();
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _interval = interval;
       _autonomy = autonomy;
       _battery = battery;
+      _status = status;
+      _valve = valve;
       if (live != null) {
         _latest = live;
         if (_history.isEmpty || _history.last.timestamp != live.timestamp) {
@@ -273,6 +284,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                   children: [
                     _connectionBadge(context),
                     const SizedBox(height: 16),
+                    if (!widget.service.isDemo) ...[
+                      _connectionCard(context),
+                      const SizedBox(height: 16),
+                    ],
                     if (_canClaim) ...[
                       _claimCard(context),
                       const SizedBox(height: 16),
@@ -281,6 +296,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     const SizedBox(height: 16),
                     _autonomyCard(context),
                     const SizedBox(height: 16),
+                    if (!widget.service.isDemo) ...[
+                      _valveCard(context),
+                      const SizedBox(height: 16),
+                    ],
                     _intervalCard(context),
                     const SizedBox(height: 16),
                     _historyCard(context),
@@ -327,6 +346,176 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         ),
       ),
     );
+  }
+
+  Widget _connectionCard(BuildContext context) {
+    final status = _status;
+    final wifi = status?.wifi;
+    final connected = wifi?.connected == true;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.settings_input_antenna, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Conexión',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.bluetooth, color: Colors.blue, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Bluetooth',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  'Conectado',
+                  style: TextStyle(
+                    color: Colors.green.shade800,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Icon(
+                  Icons.wifi,
+                  color: connected ? Colors.green : Colors.grey,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'WiFi',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      if (status == null)
+                        const Text(
+                          '—',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        )
+                      else if (connected)
+                        Text(
+                          'Conectado a "${wifi?.ssid ?? ''}"\n'
+                          'IP ${wifi?.ip ?? '—'} · señal ${wifi?.rssi ?? 0} dBm',
+                          style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                        )
+                      else
+                        const Text(
+                          'Sin conexión WiFi',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.wifi_tethering, color: Colors.blue),
+                  tooltip: 'Configurar WiFi del nodo',
+                  onPressed: _busy ? null : _openWifiConfig,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _valveCard(BuildContext context) {
+    final on = _valve == true;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              on ? Icons.gesture : Icons.gesture_outlined,
+              color: on ? Colors.green.shade800 : Colors.grey,
+              size: 28,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Válvula de riego',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    on ? 'Electroválvula ABIERTA' : 'Electroválvula cerrada',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: on ? Colors.green.shade800 : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: on,
+              onChanged: _busy || _valve == null ? null : (value) => _setValve(value),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setValve(bool on) async {
+    final conn = _conn;
+    if (conn == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await conn.setValve(on);
+      if (!mounted) return;
+      setState(() => _valve = on);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(on ? 'Electroválvula abierta por Bluetooth' : 'Electroválvula cerrada'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo controlar la válvula: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openWifiConfig() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B1220),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const NodeWifiSheet(),
+    );
+    if (mounted) _refreshAll();
   }
 
   Widget _claimCard(BuildContext context) {

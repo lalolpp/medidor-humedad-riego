@@ -96,6 +96,22 @@ class DemoNodoConnection implements NodoConnection {
   Future<List<Reading>> readHistory() async => List.of(_history);
 
   @override
+  Future<ConnectionStatus?> readConnectionStatus() async {
+    return const ConnectionStatus(
+      bluetooth: true,
+      wifi: null,
+    );
+  }
+
+  bool _valve = false;
+
+  @override
+  Future<void> setValve(bool on) async => _valve = on;
+
+  @override
+  Future<bool?> readValve() async => _valve;
+
+  @override
   Future<void> close() async {
     _timer?.cancel();
     await _controller.close();

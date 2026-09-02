@@ -11,5 +11,8 @@ abstract class NodoConnection {
   Future<BatteryInfo?> readBattery();
   Future<int> readHistoryCount();
   Future<List<Reading>> readHistory();
+  Future<ConnectionStatus?> readConnectionStatus();
+  Future<void> setValve(bool on);
+  Future<bool?> readValve();
   Future<void> close();
 }

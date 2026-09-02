@@ -3,9 +3,11 @@
 #include "storage.h"
 #include "power.h"
 #include "readings_store.h"
+#include "valve.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <WiFi.h>
 #include <ArduinoJson.h>
 
 #define UUID_SERVICE "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -16,6 +18,8 @@
 #define UUID_CHR_HIST_COUNT "7d7e8f90-1234-4a5b-9c8d-1e2f3a4b5c6d"
 #define UUID_CHR_HIST_NEXT "8e8f9a0b-1234-4a5b-8c7d-9e0f1a2b3c4d"
 #define UUID_CHR_WIFI "c1a5f0d2-77e8-4b39-9a44-52f10de91b63"
+#define UUID_CHR_STATUS "6f3a1f5d-8c1e-4e0b-9a2d-3b4c5d6e7f01"
+#define UUID_CHR_VALVE "a1b2c3d4-5e6f-4a0b-9c8d-7e6f5a4b3c2d"
 
 static BLECharacteristic *intervalChr = nullptr;
 static BLECharacteristic *autonomyChr = nullptr;
@@ -24,6 +28,8 @@ static BLECharacteristic *batteryChr = nullptr;
 static BLECharacteristic *histCountChr = nullptr;
 static BLECharacteristic *histNextChr = nullptr;
 static BLECharacteristic *wifiChr = nullptr;
+static BLECharacteristic *statusChr = nullptr;
+static BLECharacteristic *valveChr = nullptr;
 
 static bool clientConnected = false;
 static bool bleStarted = false;
@@ -132,6 +138,49 @@ class WifiCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
+// Estado de conexión del nodo: {"bt":bool,"wifi":{"connected":bool,"ssid":str,"ip":str,"rssi":int}}
+// El teléfono lo muestra en el menú "Conexión" (parecido al de un celular).
+class StatusCallbacks : public BLECharacteristicCallbacks {
+  void onRead(BLECharacteristic *chr) override {
+    JsonDocument doc;
+    doc["bt"] = clientConnected;
+    JsonObject wifi = doc["wifi"].to<JsonObject>();
+    bool connected = (WiFi.status() == WL_CONNECTED);
+    wifi["connected"] = connected;
+    if (connected) {
+      String ssid = WiFi.SSID();
+      wifi["ssid"] = ssid;
+      wifi["ip"] = WiFi.localIP().toString();
+      wifi["rssi"] = WiFi.RSSI();
+    } else {
+      wifi["ssid"] = "";
+      wifi["ip"] = "";
+      wifi["rssi"] = 0;
+    }
+    char buf[256];
+    serializeJson(doc, buf, sizeof(buf));
+    Serial.printf("[BLE] estado enviado: %s\n", buf);
+    chr->setValue((uint8_t *)buf, strlen(buf));
+  }
+};
+
+// Control directo del relé de riego por BLE (modo isla, sin nube).
+// Escribir "1"/"on" apaga/enciende al instante; leer devuelve "1"/"0".
+class ValveCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *chr) override {
+    String value = String(chr->getValue().c_str());
+    value.trim();
+    value.toLowerCase();
+    bool on = (value == "1" || value == "on");
+    valveSet(on);
+    chr->setValue(on ? "1" : "0");
+    Serial.printf("[BLE] Válvula por BLE -> %s\n", on ? "ON" : "OFF");
+  }
+  void onRead(BLECharacteristic *chr) override {
+    chr->setValue(valveActive() ? "1" : "0");
+  }
+};
+
 class HistNextCallbacks : public BLECharacteristicCallbacks {
   void onRead(BLECharacteristic *chr) override {
     static char buf[1536];
@@ -169,6 +218,12 @@ void bleInit() {
   wifiChr = service->createCharacteristic(UUID_CHR_WIFI, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
   wifiChr->setCallbacks(new WifiCallbacks());
 
+  statusChr = service->createCharacteristic(UUID_CHR_STATUS, BLECharacteristic::PROPERTY_READ);
+  statusChr->setCallbacks(new StatusCallbacks());
+
+  valveChr = service->createCharacteristic(UUID_CHR_VALVE, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+  valveChr->setCallbacks(new ValveCallbacks());
+
   service->start();
 
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
@@ -197,6 +252,8 @@ void bleDeinit() {
   histCountChr = nullptr;
   histNextChr = nullptr;
   wifiChr = nullptr;
+  statusChr = nullptr;
+  valveChr = nullptr;
   clientConnected = false;
   bleStarted = false;
   Serial.println("[BLE] detenido (RAM liberada para ciclo de nube)");
